@@ -17,6 +17,6 @@ variable "ssh_key_path" {
 }
 
 variable "allowed_ssh_cidrs" {
-  description = "SSH(22) 인바운드를 허용할 IP 목록(CIDR). 실제 값은 terraform.tfvars에서 채운다"
+  description = "SSH(22) 인바운드를 허용할 IP 목록(CIDR)"
   type        = list(string)
 }

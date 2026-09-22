@@ -18,3 +18,12 @@ output "upload_bucket_name" {
 output "domain_record" {
   value = aws_route53_record.v1.fqdn
 }
+
+output "backend_dev_access_key_id" {
+  value = aws_iam_access_key.backend_dev.id
+}
+
+output "backend_dev_secret_access_key" {
+  value     = aws_iam_access_key.backend_dev.secret
+  sensitive = true
+}
