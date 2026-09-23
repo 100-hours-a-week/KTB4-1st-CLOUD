@@ -27,7 +27,7 @@ KTB4-1st-CLOUD/
 └── README.md
 ```
 
-- `infra/` : IaC(Terraform) 코드. 단계별 설계·구성 이유는 위키의 [v1 IaC 도입 및 구성](https://github.com/100-hours-a-week/KTB4-1st-CLOUD/wiki/Cloud-Dev-1st-IaC-tobby) 문서를 따른다
+- `infra/` : IaC(Terraform) 코드. 단계별 설계·구성 이유는 위키의 [v1 IaC 도입 및 구성](https://github.com/100-hours-a-week/KTB4-1st-CLOUD/wiki/Cloud-Dev-1st-IaC) 문서를 따른다
 - `docker-compose.yml` : v1 EC2 위에서 띄울 컨테이너 정의. 비밀값은 `.env`(커밋 안 함)로 주입
 
 `releases/`(배포 버전 매니페스트), `.github/workflows/`(CI/CD), `nginx/`, `scripts/` 등은 아직 만들어지지 않았고, 실제로 추가되는 시점에 이 구조도 같이 갱신한다.
