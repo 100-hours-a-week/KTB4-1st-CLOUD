@@ -13,16 +13,17 @@
 KTB4-1st-CLOUD/
 ├── infra/
 │   └── v1/
-│       ├── main.tf                  # terraform/provider 블록 (state는 로컬)
+│       ├── main.tf
 │       ├── variables.tf
-│       ├── network.tf               # 기본 VPC/Subnet data source, SG(22/80/443)
-│       ├── iam.tf                   # Infra-Admin Group+User, EC2 Instance Profile Role
-│       ├── s3.tf                    # 업로드 이미지 버킷
-│       ├── compute.tf               # AMI data source, Key Pair, EC2(t4g.small), EIP
-│       ├── dns.tf                   # Route53 zone data source, A 레코드
+│       ├── network.tf
+│       ├── iam.tf
+│       ├── s3.tf
+│       ├── compute.tf
+│       ├── dns.tf
 │       ├── outputs.tf
 │       └── terraform.tfvars.example
-├── docker-compose.yml                # v1 컨테이너 정의
+├── docker-compose.yml
+├── nginx
 └── README.md
 ```
 
