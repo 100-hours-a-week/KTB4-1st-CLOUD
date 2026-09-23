@@ -34,6 +34,11 @@ resource "aws_instance" "v1" {
   tags = {
     Name = "bakkucca-v1"
   }
+
+  # 새 AMI가 나올 때마다 인스턴스가 교체되지 않도록 AMI 변경은 무시
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "v1" {
