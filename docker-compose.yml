@@ -94,9 +94,6 @@ services:
       - TZ=Asia/Seoul
       # JVM 힙 메모리를 512MB로 제한하고 GC 오버헤드를 줄이기 위한 옵션
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m
-      # 첫 배포 빈 DB 문제를 해결하기 위해 Flyway를 비활성화하고 JPA DDL을 update로 설정
-      - SPRING_FLYWAY_ENABLED=false
-      - JPA_DDL_AUTO=update
     depends_on:
       mysql:
         condition: service_healthy # MySQL 핑 응답 확인 후 구동 시작
