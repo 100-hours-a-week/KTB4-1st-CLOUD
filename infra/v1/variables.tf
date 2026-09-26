@@ -15,8 +15,3 @@ variable "ssh_key_path" {
   type        = string
   default     = "~/.ssh/bakkucca_v1.pub"
 }
-
-variable "allowed_ssh_cidrs" {
-  description = "SSH(22) 인바운드를 허용할 IP 목록(CIDR)"
-  type        = list(string)
-}

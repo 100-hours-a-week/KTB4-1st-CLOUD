@@ -31,12 +31,13 @@ resource "aws_security_group" "v1" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # GitHub Actions 러너(CD)가 SSH로 배포한다. 러너 IP는 고정되지 않아 전체 허용하고, 인증은 키로만 한다.
   ingress {
-    description = "SSH - dev IPs only"
+    description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.allowed_ssh_cidrs
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
