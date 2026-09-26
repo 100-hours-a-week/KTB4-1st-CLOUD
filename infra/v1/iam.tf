@@ -35,7 +35,7 @@ resource "aws_iam_group_policy" "infra_admin" {
         Sid      = "AllowUserToCreateVirtualMFADevice"
         Effect   = "Allow"
         Action   = "iam:CreateVirtualMFADevice"
-        Resource = "arn:aws:iam::*:mfa/$${aws:username}"
+        Resource = "arn:aws:iam::*:mfa/*"
       },
       {
         Sid    = "AllowUserToManageTheirOwnMFA"
