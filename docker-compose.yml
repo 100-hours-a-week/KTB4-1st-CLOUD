@@ -57,7 +57,7 @@ services:
         limits:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/readiness')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -75,19 +75,28 @@ services:
     restart: unless-stopped
     environment:
       - SPRING_PROFILES_ACTIVE=prod
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true
-      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER}
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET} # 32바이트 이상 필수 (미설정 시 기동 실패)
+      - DB_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true
+      - DB_USERNAME=${MYSQL_USER}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET} # 32바이트 이상
+      - CORS_ALLOWED_ORIGINS=https://bakkucca.com,https://www.bakkucca.com # CORS와 WebSocket 허용 Origin
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
       # 카카오 로그인
       - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID}
       - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
       - KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI}
       - FRONTEND_REDIRECT_URI=${FRONTEND_REDIRECT_URI} # 카카오 콜백 처리 후 BE가 돌려보낼 FE 페이지
-      - FASTAPI_BASE_URL=http://fastapi:8000
+      # AI 서버 호출 주소 (BE는 엔드포인트 전체 URL)
+      - AI_IMAGE_ANALYSIS_URL=http://fastapi:8000/api/vision/analyze-item
+      - AI_TEXT_MODERATION_URL=http://fastapi:8000/api/moderation/check-text
+      - SPRING_FLYWAY_ENABLED=${SPRING_FLYWAY_ENABLED:-true}
+      - JPA_DDL_AUTO=${JPA_DDL_AUTO:-validate}
       - TZ=Asia/Seoul
       # JVM 힙 메모리를 512MB로 제한하고 GC 오버헤드를 줄이기 위한 옵션
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m
+      # 첫 배포 빈 DB 문제를 해결하기 위해 Flyway를 비활성화하고 JPA DDL을 update로 설정
+      - SPRING_FLYWAY_ENABLED=false
+      - JPA_DDL_AUTO=update
     depends_on:
       mysql:
         condition: service_healthy # MySQL 핑 응답 확인 후 구동 시작
@@ -119,7 +128,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - NODE_OPTIONS=--max-old-space-size=256
-      - INTERNAL_API_URL=http://springboot:8080
+      - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
     deploy:
       resources:
         limits:
@@ -157,11 +166,8 @@ services:
       resources:
         limits:
           memory: 64M
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
+    # 헬스체크: 80번은 전부 HTTPS로 리다이렉트되어 컨테이너 내부 확인이 실패함
+    # 배포 시 script/deploy.sh가 443을 거친 실제 요청으로 nginx를 검증
     logging: *default-logging
     networks:
       - frontend-net
