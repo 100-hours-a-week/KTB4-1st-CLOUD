@@ -50,7 +50,7 @@ services:
     container_name: fastapi
     restart: unless-stopped
     environment:
-      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} # AI 서버 Settings.anthropic_api_key (필수값, 없으면 기동 실패)
       - TZ=Asia/Seoul
     deploy:
       resources:
@@ -78,6 +78,12 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=${MYSQL_USER}
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET} # 32바이트 이상 필수 (미설정 시 기동 실패)
+      # 카카오 로그인
+      - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID}
+      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
+      - KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI}
+      - FRONTEND_REDIRECT_URI=${FRONTEND_REDIRECT_URI} # 카카오 콜백 처리 후 BE가 돌려보낼 FE 페이지
       - FASTAPI_BASE_URL=http://fastapi:8000
       - TZ=Asia/Seoul
       # JVM 힙 메모리를 512MB로 제한하고 GC 오버헤드를 줄이기 위한 옵션
@@ -92,7 +98,7 @@ services:
         limits:
           memory: 1024M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -119,7 +125,7 @@ services:
         limits:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health/readiness || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
