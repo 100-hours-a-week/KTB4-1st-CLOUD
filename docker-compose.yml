@@ -89,6 +89,7 @@ services:
       # AI 서버 호출 주소 (BE는 엔드포인트 전체 URL)
       - AI_IMAGE_ANALYSIS_URL=http://fastapi:8000/api/vision/analyze-item
       - AI_TEXT_MODERATION_URL=http://fastapi:8000/api/moderation/check-text
+      - AI_ITEM_PRICE_URL=http://fastapi:8000/value/estimate-price
       - SPRING_FLYWAY_ENABLED=${SPRING_FLYWAY_ENABLED:-true}
       - JPA_DDL_AUTO=${JPA_DDL_AUTO:-validate}
       - TZ=Asia/Seoul
