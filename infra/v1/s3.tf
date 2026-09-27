@@ -44,8 +44,15 @@ resource "aws_iam_user_policy" "backend_dev" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          # BE가 업로드 이미지에 pending 태그를 붙이고(PutObject 시), 읽고, 등록 시 바꾼다
+          "s3:PutObjectTagging",
+          "s3:GetObjectTagging",
+        ]
         Resource = "${aws_s3_bucket.uploads.arn}/*"
       },
     ]
