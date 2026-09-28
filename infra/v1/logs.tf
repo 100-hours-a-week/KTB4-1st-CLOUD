@@ -30,7 +30,6 @@ resource "aws_iam_role_policy" "instance_logs" {
 }
 
 # 팀원 공용 로그 조회 계정 (읽기 전용)
-# 콘솔 비밀번호는 state에 남지 않도록 Terraform 밖(IAM 콘솔)에서 발급한다
 resource "aws_iam_user" "log_viewer" {
   name = "bakkucca-log-viewer"
 }
@@ -38,10 +37,4 @@ resource "aws_iam_user" "log_viewer" {
 resource "aws_iam_user_policy_attachment" "log_viewer_read" {
   user       = aws_iam_user.log_viewer.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess"
-}
-
-# 첫 로그인 때 비밀번호를 직접 바꿀 수 있도록 허용
-resource "aws_iam_user_policy_attachment" "log_viewer_change_password" {
-  user       = aws_iam_user.log_viewer.name
-  policy_arn = "arn:aws:iam::aws:policy/IAMUserChangePassword"
 }
