@@ -5,7 +5,7 @@ run-name: "Deploy: ${{ inputs.release_version }} (${{ github.actor }})"
 
 # 정기 배포, 수동 롤백: 인프라 담당자가 main에 병합된 Release Bundle 버전을 입력해 실행
 #   - 수동 롤백은 이전 버전(예: v1.0.0)을 입력해 같은 방식으로 실행한다
-#   - GitHub 러너: 번들 읽기 → 이미지 존재 확인 → 배포 파일을 EC2에 업로드 → EC2 GHCR 로그인 → SSH로 deploy.sh 실행
+#   - GitHub 러너: 번들 읽기 → 이미지 존재 확인 → 배포 파일을 EC2에 업로드 → EC2 GHCR 로그인 → SSH로 deploy.sh 실행 → 디스코드 알림
 #   - EC2(script/deploy.sh): pull → 교체 → 검증 → 실패 시 낮은 버전의 번들로 최대 4번 롤백
 on:
   workflow_dispatch:
@@ -105,6 +105,7 @@ jobs:
           printf 'Host %s\n  IdentityFile ~/.ssh/id_deploy\n  ServerAliveInterval 30\n' "$host" >> ~/.ssh/config
 
       - name: EC2 배포
+        id: deploy
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
           CANDIDATES: ${{ steps.bundle.outputs.candidates }}
@@ -128,6 +129,7 @@ jobs:
           # shellcheck disable=SC2029 # 사용자 이름은 러너에서 채워 보내는 것이 의도
           if ! printf '%s' "$GHCR_TOKEN" | ssh "$EC2" "docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin" > /dev/null; then
             echo "::error::EC2에서 GHCR 로그인에 실패했습니다. ec2-user가 docker 그룹에 있는지 확인하세요."
+            echo "code=3" >> "$GITHUB_OUTPUT" # 운영 변경 없이 중단
             exit 1
           fi
 
@@ -136,6 +138,7 @@ jobs:
           ssh "$EC2" "bash ~/bakkucca/deploy.sh ${RELEASE_VERSION} ${CANDIDATES}"
           code=$?
           set -e
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
 
           case "$code" in
             0) echo "배포 성공: ${RELEASE_VERSION}" ;;
@@ -145,4 +148,88 @@ jobs:
             *) echo "::error::SSH 실행이 비정상 종료했습니다(code=${code})."; exit 1 ;;
           esac
 
-      # 디스코드 알림
+      - name: 디스코드 알림
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          CODE: ${{ steps.deploy.outputs.code }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          # 1. 웹훅 URL 미등록 시 에러 없이 건너뜀
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::warning::DISCORD_WEBHOOK_URL 시크릿이 없어 알림을 건너뜁니다."
+            exit 0
+          fi
+
+          # 2. 배포 결과별 색상, 제목, 설명
+          if [ "$JOB_STATUS" = "cancelled" ]; then
+            COLOR=15105570; STATUS_EMOJI="⚠️"; STATUS_TEXT="취소됨"
+            DETAIL="워크플로우가 취소됐습니다. EC2에서는 배포가 계속 진행될 수 있으니 상태를 확인하세요."
+          else
+            case "$CODE" in
+              0)
+                COLOR=3066993; STATUS_EMOJI="✅"; STATUS_TEXT="배포 성공"
+                DETAIL="검증을 통과했습니다." ;;
+              1)
+                COLOR=15105570; STATUS_EMOJI="⚠️"; STATUS_TEXT="배포 실패, 롤백 완료"
+                DETAIL="검증에 실패해 이전 번들로 롤백했습니다. 실행 로그에서 실패 원인을 확인하세요." ;;
+              2)
+                COLOR=15158332; STATUS_EMOJI="🚨"; STATUS_TEXT="배포 실패, 롤백 실패"
+                DETAIL="롤백 후보도 모두 실패했습니다. 즉시 확인이 필요합니다." ;;
+              3)
+                COLOR=15105570; STATUS_EMOJI="⚠️"; STATUS_TEXT="배포 중단"
+                DETAIL="이미지 pull 또는 EC2 GHCR 로그인에 실패했습니다. 운영 중인 서비스는 바뀌지 않았습니다." ;;
+              "")
+                COLOR=15105570; STATUS_EMOJI="⚠️"; STATUS_TEXT="배포 중단"
+                DETAIL="배포 전 단계(번들 확인, 이미지 확인, 파일 업로드)에서 실패했습니다. 운영 중인 서비스는 바뀌지 않았습니다." ;;
+              *)
+                COLOR=15158332; STATUS_EMOJI="🚨"; STATUS_TEXT="배포 결과 불명"
+                DETAIL="EC2 실행이 비정상 종료했습니다(code=${CODE}). 운영 상태를 확인하세요." ;;
+            esac
+          fi
+
+          # 3. 번들의 이미지 태그
+          BUNDLE="releases/${RELEASE_VERSION}.yaml"
+          IMAGES="번들을 찾지 못함"
+          if [ -f "$BUNDLE" ]; then
+            IMAGES="FE \`$(yq '.services.frontend.image_tag' "$BUNDLE")\` / BE \`$(yq '.services.backend.image_tag' "$BUNDLE")\` / AI \`$(yq '.services.ai.image_tag' "$BUNDLE")\`"
+          fi
+
+          # 4. jq를 통한 안전한 JSON 직렬화
+          jq -n \
+            --arg title "${STATUS_EMOJI} [${WORKFLOW_NAME}] ${STATUS_TEXT}" \
+            --argjson color "$COLOR" \
+            --arg version "\`${RELEASE_VERSION}\`" \
+            --arg actor "$ACTOR" \
+            --arg images "$IMAGES" \
+            --arg detail "$DETAIL" \
+            --arg run_url "[GitHub Actions 실행 로그 바로가기](${RUN_URL})" \
+            --arg time "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  color: $color,
+                  fields: [
+                    { name: "배포 버전", value: $version, inline: true },
+                    { name: "실행자", value: $actor, inline: true },
+                    { name: "이미지", value: $images },
+                    { name: "결과", value: $detail },
+                    { name: "상세 로그", value: $run_url }
+                  ],
+                  footer: { text: "바꾸까 배포 알림" },
+                  timestamp: $time
+                }
+              ]
+            }' > "$RUNNER_TEMP/discord.json"
+
+          # 5. Webhook 전송 (실패해도 워크플로우를 중단시키지 않음)
+          curl -s -S --fail \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d @"$RUNNER_TEMP/discord.json" \
+            "$WEBHOOK_URL" || echo "::warning::디스코드 알림 전송에 실패했습니다."
