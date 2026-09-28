@@ -1,0 +1,27 @@
+# EC2 운영 전용: 컨테이너 로그를 CloudWatch Logs로 보낸다
+#   - deploy.yml이 .env에 COMPOSE_FILE=docker-compose.yml:docker-compose.awslogs.yml 을 넣어 docker-compose.yml 위에 겹쳐 적용한다
+#   - 로컬에서는 docker-compose.yml만 쓰므로 AWS 자격증명 없이 기존처럼 실행된다
+#   - 전송은 EC2의 docker 데몬이 인스턴스 역할 권한으로 하고, docker logs 명령도 그대로 쓸 수 있다
+#   - 로그 그룹: /bakkucca/prod/containers (Terraform infra/v1/logs.tf), 로그 스트림: 컨테이너 이름
+
+x-cloudwatch-logging: &cloudwatch-logging
+  driver: awslogs
+  options:
+    awslogs-region: ap-northeast-2
+    awslogs-group: /bakkucca/prod/containers
+    tag: "{{.Name}}"
+    # CloudWatch 전송이 늦어도 앱이 멈추지 않도록 버퍼에 쌓고 비동기로 보낸다
+    mode: non-blocking
+    max-buffer-size: 4m
+
+services:
+  mysql:
+    logging: *cloudwatch-logging
+  fastapi:
+    logging: *cloudwatch-logging
+  springboot:
+    logging: *cloudwatch-logging
+  nextjs:
+    logging: *cloudwatch-logging
+  nginx:
+    logging: *cloudwatch-logging

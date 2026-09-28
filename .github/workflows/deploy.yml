@@ -115,10 +115,12 @@ jobs:
 
           # 배포 파일: compose, nginx 설정, 배포 스크립트, 비밀값(ENV_FILE에서 이미지 변수는 번들 값을 쓰므로 제외)
           mkdir -p "$PKG/nginx"
-          cp docker-compose.yml "$PKG/"
+          cp docker-compose.yml docker-compose.awslogs.yml "$PKG/"
           cp nginx/default.conf "$PKG/nginx/"
           cp script/deploy.sh "$PKG/"
-          printf '%s\n' "$ENV_FILE" | grep -vE '^(NEXTJS|SPRINGBOOT|FASTAPI)_IMAGE=' > "$PKG/base.env"
+          printf '%s\n' "$ENV_FILE" | grep -vE '^(NEXTJS|SPRINGBOOT|FASTAPI)_IMAGE=|^COMPOSE_FILE=' > "$PKG/base.env"
+          # EC2에서는 컨테이너 로그를 CloudWatch Logs로 보내는 설정을 겹쳐 적용
+          echo "COMPOSE_FILE=docker-compose.yml:docker-compose.awslogs.yml" >> "$PKG/base.env"
 
           # ~/bakkucca 에 업로드. 디렉터리 이름(bakkucca)이 compose 프로젝트 이름이 되어 볼륨 이름을 정한다.
           tar -czf - -C "$PKG" . | ssh "$EC2" 'rm -rf ~/bakkucca/releases && mkdir -p ~/bakkucca && tar -xzf - -C ~/bakkucca'

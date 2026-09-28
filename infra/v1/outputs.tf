@@ -27,3 +27,16 @@ output "backend_dev_secret_access_key" {
   value     = aws_iam_access_key.backend_dev.secret
   sensitive = true
 }
+
+# 팀원 공용 로그 조회 계정의 콘솔 로그인 주소와 로그 그룹
+output "log_viewer_console_url" {
+  value = "https://${data.aws_caller_identity.current.account_id}.signin.aws.amazon.com/console"
+}
+
+output "log_viewer_user_name" {
+  value = aws_iam_user.log_viewer.name
+}
+
+output "container_log_group" {
+  value = aws_cloudwatch_log_group.containers.name
+}
