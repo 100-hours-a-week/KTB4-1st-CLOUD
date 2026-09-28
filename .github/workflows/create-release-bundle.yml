@@ -1,0 +1,388 @@
+name: Create Release Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_version:
+        description: '릴리즈 번들 버전 (예: v1.1.0)'
+        required: true
+        type: string
+      backend_tag:
+        description: 'Spring Boot 백엔드 이미지 태그 (예: v1.1.2)'
+        required: true
+        type: string
+      ai_tag:
+        description: 'FastAPI AI 이미지 태그 (예: v1.1.0)'
+        required: true
+        type: string
+      frontend_tag:
+        description: 'Next.js 프론트엔드 이미지 태그 (예: v1.0.0)'
+        required: true
+        type: string
+      description:
+        description: '릴리즈 변경사항 및 요약 설명'
+        required: false
+        default: '정기 릴리즈'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: read
+
+jobs:
+  validate-and-create-manifest:
+    name: Validate Images & Generate Release Manifest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set timezone & release date
+        id: time
+        run: |
+          export TZ="Asia/Seoul"
+          RELEASE_DATE=$(date -Iseconds)
+          echo "release_date=${RELEASE_DATE}" >> $GITHUB_OUTPUT
+
+      - name: Ping GHCR & Validate Container Images
+        id: inspect-images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+          BE_TAG: ${{ inputs.backend_tag }}
+          AI_TAG: ${{ inputs.ai_tag }}
+          FE_TAG: ${{ inputs.frontend_tag }}
+        run: |
+          set -e
+
+          SERVICES=(
+            "backend springboot 100-hours-a-week/ktb4-1st-be ${BE_TAG}"
+            "ai fastapi 100-hours-a-week/ktb4_1st_ai ${AI_TAG}"
+            "frontend nextjs 100-hours-a-week/ktb4-1st-fe ${FE_TAG}"
+          )
+
+          mkdir -p .release-metadata
+
+          for item in "${SERVICES[@]}"; do
+            read -r svc_key svc_name repo_path tag <<< "$item"
+
+            echo "========================================================"
+            echo ">>> [Docker Registry Ping] Checking ghcr.io/${repo_path}:${tag}..."
+            echo "========================================================"
+
+            # GHCR OCI/Docker Registry V2 토큰 요청
+            AUTH_RESP=$(curl -s -f -u "${GH_USER}:${GH_TOKEN}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo_path}:pull") || {
+              echo "::error::[인증 실패] ghcr.io/${repo_path} 토큰 발급 실패. (read:packages 권한의 GHCR_TOKEN 필요)"
+              exit 1
+            }
+            BEARER_TOKEN=$(echo "$AUTH_RESP" | jq -r '.token // empty')
+
+            if [ -z "$BEARER_TOKEN" ] || [ "$BEARER_TOKEN" = "null" ]; then
+              echo "::error::[토큰 파싱 에러] ghcr.io/${repo_path} 유효 토큰이 비어있습니다."
+              exit 1
+            fi
+
+            # Docker Registry V2 Manifest Ping (HEAD/GET) & 존재 확인
+            MANIFEST_URL="https://ghcr.io/v2/${repo_path}/manifests/${tag}"
+            MANIFEST_HEADERS=$(curl -s -i \
+              -H "Authorization: Bearer ${BEARER_TOKEN}" \
+              -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json" \
+              "${MANIFEST_URL}")
+
+            HTTP_STATUS=$(echo "$MANIFEST_HEADERS" | grep -i "^HTTP/" | tail -n 1 | awk '{print $2}')
+
+            if [ "$HTTP_STATUS" != "200" ]; then
+              echo "::error::[Ping 실패] ghcr.io/${repo_path}:${tag} 이미지를 찾을 수 없습니다. (HTTP Status: ${HTTP_STATUS})"
+              exit 1
+            fi
+
+            # Docker-Content-Digest 추출
+            DIGEST=$(echo "$MANIFEST_HEADERS" | grep -i "^docker-content-digest:" | head -n 1 | awk '{print $2}' | tr -d '\r\n')
+            if [ -z "$DIGEST" ]; then
+              echo "::error::[다이제스트 누락] ghcr.io/${repo_path}:${tag}의 docker-content-digest 헤더를 추출하지 못했습니다."
+              exit 1
+            fi
+
+            # 이미지 Manifest 본문 파싱 (OCI Annotation/Labels 및 빌드 타임스탬프 추출)
+            MANIFEST_BODY=$(curl -s \
+              -H "Authorization: Bearer ${BEARER_TOKEN}" \
+              -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json" \
+              "${MANIFEST_URL}")
+
+            CONFIG_DIGEST=$(echo "$MANIFEST_BODY" | jq -r '.config.digest // empty')
+            BUILT_AT=""
+            GIT_COMMIT_SHA=""
+
+            if [ -n "$CONFIG_DIGEST" ]; then
+              CONFIG_JSON=$(curl -s -L \
+                -H "Authorization: Bearer ${BEARER_TOKEN}" \
+                "https://ghcr.io/v2/${repo_path}/blobs/${CONFIG_DIGEST}")
+
+              BUILT_AT=$(echo "$CONFIG_JSON" | jq -r '.created // empty')
+              GIT_COMMIT_SHA=$(echo "$CONFIG_JSON" | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty')
+            fi
+
+            [ -z "$BUILT_AT" ] || [ "$BUILT_AT" = "null" ] && BUILT_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            if [ -z "$GIT_COMMIT_SHA" ] || [ "$GIT_COMMIT_SHA" = "null" ]; then
+              GIT_COMMIT_SHA="unknown"
+              GIT_COMMIT_SHORT="unknown"
+            else
+              GIT_COMMIT_SHORT="${GIT_COMMIT_SHA:0:7}"
+            fi
+
+            echo ">>> [성공] ${svc_key} (${svc_name}) 검증 완료"
+            echo "    Digest: ${DIGEST}"
+            echo "    Built:  ${BUILT_AT}"
+            echo "    Commit: ${GIT_COMMIT_SHORT}"
+
+            jq -n \
+              --arg service_name "$svc_name" \
+              --arg image_uri "ghcr.io/${repo_path}" \
+              --arg image_tag "$tag" \
+              --arg image_digest "$DIGEST" \
+              --arg git_commit_sha "$GIT_COMMIT_SHA" \
+              --arg git_commit_short "$GIT_COMMIT_SHORT" \
+              --arg git_ref "refs/tags/${tag}" \
+              --arg built_at "$BUILT_AT" \
+              '{
+                service_name: $service_name,
+                image_uri: $image_uri,
+                image_tag: $image_tag,
+                image_digest: $image_digest,
+                git_commit_sha: $git_commit_sha,
+                git_commit_short: $git_commit_short,
+                git_ref: $git_ref,
+                built_at: $built_at
+              }' > ".release-metadata/${svc_key}.json"
+          done
+
+      - name: Generate Release Manifest YAML
+        id: generate-yaml
+        env:
+          BUNDLE_VERSION: ${{ inputs.bundle_version }}
+          RELEASE_DATE: ${{ steps.time.outputs.release_date }}
+          RELEASED_BY: ${{ github.actor }}
+          DESCRIPTION: ${{ inputs.description }}
+        run: |
+          mkdir -p releases
+          MANIFEST_PATH="releases/${BUNDLE_VERSION}.yaml"
+
+          if ! command -v yq &> /dev/null; then
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+
+          jq -n \
+            --arg bundle_version "$BUNDLE_VERSION" \
+            --arg release_date "$RELEASE_DATE" \
+            --arg released_by "$RELEASED_BY" \
+            --arg target_env "production" \
+            --arg desc "$DESCRIPTION" \
+            --slurpfile be .release-metadata/backend.json \
+            --slurpfile ai .release-metadata/ai.json \
+            --slurpfile fe .release-metadata/frontend.json \
+            '{
+              release_metadata: {
+                bundle_version: $bundle_version,
+                release_date: $release_date,
+                released_by: $released_by,
+                target_environment: $target_env,
+                description: $desc
+              },
+              services: {
+                backend: $be[0],
+                ai: $ai[0],
+                frontend: $fe[0]
+              }
+            }' | yq -P -o=yaml > "$MANIFEST_PATH"
+
+          echo "manifest_path=${MANIFEST_PATH}" >> $GITHUB_OUTPUT
+
+      - name: Commit, Push & Create/Update Release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUNDLE_VERSION: ${{ inputs.bundle_version }}
+          MANIFEST_PATH: ${{ steps.generate-yaml.outputs.manifest_path }}
+          DESCRIPTION: ${{ inputs.description }}
+          BE_TAG: ${{ inputs.backend_tag }}
+          AI_TAG: ${{ inputs.ai_tag }}
+          FE_TAG: ${{ inputs.frontend_tag }}
+          IS_ACT: ${{ env.ACT }}
+        run: |
+          BRANCH_NAME="release/${BUNDLE_VERSION}"
+          
+          # PR 본문 Markdown 파일 생성
+          cat << 'EOF' > pr_template.md
+          ## 정기 배포 Release Bundle (${{ env.BUNDLE_VERSION }})
+          
+          배포 준비 워크플로우에 의해 자동 생성된 릴리즈 매니페스트 PR입니다.
+          GHCR Docker Registry Ping 검증을 모두 통과한 컨테이너 이미지 조합입니다.
+          
+          ### 📌 메타데이터 요약
+          - **Bundle Version**: `${{ env.BUNDLE_VERSION }}`
+          - **배포 요청자**: `@${{ github.actor }}`
+          - **릴리즈 설명**: ${{ env.DESCRIPTION }}
+          - **매니페스트 경로**: `${{ env.MANIFEST_PATH }}`
+          
+          ---
+          
+          ### 🚀 배포 대상 컨테이너 이미지
+          | 서비스 | 컴포넌트 | 이미지 URI & Tag |
+          |:---:|:---:|:---:|
+          | **Backend** | `springboot` | `ghcr.io/100-hours-a-week/ktb4-1st-be:${{ env.BE_TAG }}` |
+          | **AI** | `fastapi` | `ghcr.io/100-hours-a-week/ktb4_1st_ai:${{ env.AI_TAG }}` |
+          | **Frontend** | `nextjs` | `ghcr.io/100-hours-a-week/ktb4-1st-fe:${{ env.FE_TAG }}` |
+          
+          ---
+          
+          ### ⚠️ 배포 승인 정책
+          > **규정**: 본 Release Bundle은 **BE, FE, AI 파트의 각 담당자를 포함하여 최소 3명 이상의 승인(Review Approved)**을 받아야 `main` 브랜치에 병합할 수 있습니다.
+          
+          - **Backend 파트 승인** (API 스키마 및 DB 호환성 검토)
+          - **AI 파트 승인** (FastAPI 응답 규격 및 연동 검토)
+          - **Frontend 파트 승인** (UI/SSR 호환성 및 라우팅 검토)
+          - **다운타임 고지 확인** (사용자 디스코드 5분 미만 점검 공지 완료)
+          
+          ---
+          ### 🎶 Release Note
+          
+          EOF
+          
+          # act 로컬 환경 감지 시 콘솔 출력 후 정상 종료
+          if [[ "$ACT" == "true" || "$IS_ACT" == "true" ]]; then
+            echo ""
+            echo "================================================================================"
+            echo "💡 [ACT LOCAL TEST MODE 감지]"
+            echo "   실제 Git Commit, Push 및 GitHub PR 생성을 건너뜁니다."
+            echo "================================================================================"
+            echo ""
+            echo "--------------------------------------------------------------------------------"
+            echo "📄 [생성된 매니페스트 파일: ${MANIFEST_PATH}]"
+            echo "--------------------------------------------------------------------------------"
+            cat "${MANIFEST_PATH}"
+            echo ""
+            echo "--------------------------------------------------------------------------------"
+            echo "📝 [생성될 PR 본문 내용: pr_template.md]"
+            echo "--------------------------------------------------------------------------------"
+            cat pr_template.md
+            echo ""
+            echo "================================================================================"
+            echo "✅ [ACT LOCAL TEST] 릴리즈 번들 파일 및 PR 본문 검증 성공!"
+            echo "================================================================================"
+            exit 0
+          fi
+          
+          # 실제 GitHub Actions 러너에서만 커밋 및 PR 생성
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git checkout -B "$BRANCH_NAME"
+          git add "$MANIFEST_PATH"
+          git commit -m "chore(release): generate release bundle manifest for ${BUNDLE_VERSION}"
+          git push origin "$BRANCH_NAME" --force
+          
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --base main --json number --jq '.[0].number')
+          
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo ">>> 기존 PR(#${EXISTING_PR})이 감지되어 내용을 갱신합니다."
+            gh pr edit "$EXISTING_PR" \
+              --title "🚀 Release Bundle: ${BUNDLE_VERSION}" \
+              --body-file pr_template.md
+          else
+            echo ">>> 신규 릴리즈 PR을 오픈합니다."
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "🚀 Release Bundle: ${BUNDLE_VERSION}" \
+              --body-file pr_template.md
+          fi
+
+      - name: Send Discord Notification
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPO_NAME: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          BUNDLE_VER: ${{ inputs.bundle_version }}
+          BE_TAG: ${{ inputs.backend_tag }}
+          AI_TAG: ${{ inputs.ai_tag }}
+          FE_TAG: ${{ inputs.frontend_tag }}
+          DESC: ${{ inputs.description || '정기 릴리즈' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_BRANCH: release/${{ inputs.bundle_version }}
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::warning::DISCORD_WEBHOOK_URL is not configured. Skipping notification."
+            exit 0
+          fi
+          
+          # 빌드 상태별 색상 및 타이틀 분기
+          case "$JOB_STATUS" in
+            success)
+              COLOR=3066993 # Green
+              STATUS_EMOJI="✅"
+              STATUS_TEXT="릴리즈 번들 생성 성공"
+              ;;
+            failure)
+              COLOR=15158332 # Red
+              STATUS_EMOJI="🚨"
+              STATUS_TEXT="릴리즈 번들 생성 실패"
+              ;;
+            *)
+              COLOR=15105570 # Orange/Yellow
+              STATUS_EMOJI="⚠️"
+              STATUS_TEXT="작업 취소됨"
+              ;;
+          esac
+          
+          TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          PR_URL="${{ github.server_url }}/${{ github.repository }}/pulls"
+          
+          # jq를 사용해 Discord Webhook Embed 페이로드 안전 직렬화
+          jq -n \
+            --arg title "${STATUS_EMOJI} [${WORKFLOW_NAME}]${STATUS_TEXT}" \
+            --argjson color "$COLOR" \
+            --arg repo "\`${REPO_NAME}\`" \
+            --arg bundle "\`${BUNDLE_VER}\`" \
+            --arg actor "$ACTOR" \
+            --arg images "• Backend: \`${BE_TAG}\`
+          • AI: \`${AI_TAG}\`
+          • Frontend: \`${FE_TAG}\`" \
+            --arg desc "$DESC" \
+            --arg pr_url "[Pull Request 목록 바로가기](${PR_URL})" \
+            --arg run_url "[GitHub Actions 실행 로그 확인](${RUN_URL})" \
+            --arg time "$TIMESTAMP" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  color: $color,
+                  fields: [
+                    { name: "저장소", value: $repo, inline: true },
+                    { name: "릴리즈 번들", value: $bundle, inline: true },
+                    { name: "배포 요청자", value: $actor, inline: true },
+                    { name: "포함된 이미지 버전", value: $images },
+                    { name: "릴리즈 설명", value: $desc },
+                    { name: "PR 바로가기", value: $pr_url, inline: true },
+                    { name: "상세 로그", value: $run_url, inline: true }
+                  ],
+                  footer: { text: "바꾸까 배포 알림" },
+                  timestamp: $time
+                }
+              ]
+            }' > payload.json
+          
+          # Webhook 전송 (curl 실패 시에도 워크플로우 전체를 깨뜨리지 않음)
+          curl -s -S --fail \
+               -H "Content-Type: application/json" \
+               -X POST \
+               -d @payload.json \
+               "$WEBHOOK_URL" || echo "::warning::Failed to deliver Discord notification."
