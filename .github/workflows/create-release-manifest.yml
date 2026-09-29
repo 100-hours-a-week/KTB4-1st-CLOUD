@@ -5,8 +5,8 @@ run-name: "Release Bundle: ${{ inputs.release_version }} (${{ github.actor }})"
 
 # 인프라 담당자가 배포할 FE/BE/AI 이미지 태그와 Release Bundle 버전을 입력
 #   - 입력한 태그가 GHCR에 실제로 있는지 Docker Registry API로 확인하고, digest/커밋 SHA/빌드 시각을 자동 기입(휴먼 에러 방지)
-#   - releases/<버전>.yaml을 release/<버전> 브랜치에 커밋해 push한다. main 대상 PR은 사람이 연다(PR 자동 생성은 추후)
-#   - 생성만 담당한다. release/<버전> 브랜치가 이미 있으면 중단한다(버전 수정은 추후 update-release-manifest)
+#   - releases/<버전>.yaml을 main에 바로 커밋해 push
+#   - 같은 버전의 번들이 main에 이미 있으면 중단한다(버전 수정은 추후 update-release-manifest)
 on:
   workflow_dispatch:
     inputs:
@@ -32,13 +32,13 @@ on:
         type: string
         default: "정기 릴리즈"
 
-# 같은 버전의 번들 생성이 동시에 실행되지 않도록 직렬 처리
+# 모두 main에 push하므로 버전과 관계없이 번들 생성을 직렬 처리(동시 push 충돌 방지)
 concurrency:
-  group: release-manifest-${{ inputs.release_version }}
+  group: release-manifest
   cancel-in-progress: false
 
 permissions:
-  contents: write # release/<버전> 브랜치 push
+  contents: write # main에 번들 커밋 push
   packages: read # GHCR 이미지 메타데이터 조회
 
 jobs:
@@ -83,12 +83,6 @@ jobs:
           # main에 병합된 번들은 배포 기록이므로 수정하지 않는다. 조합을 바꾸려면 새 버전으로 만든다.
           if [ -f "releases/${RELEASE_VERSION}.yaml" ]; then
             echo "::error::releases/${RELEASE_VERSION}.yaml 이 이미 main에 있습니다. 새 버전 번호로 다시 실행하세요."
-            exit 1
-          fi
-
-          # 생성만 담당하므로 같은 버전의 브랜치가 이미 있으면 중단
-          if git ls-remote --exit-code --heads origin "release/${RELEASE_VERSION}" > /dev/null; then
-            echo "::error::release/${RELEASE_VERSION} 브랜치가 이미 있습니다. 기존 PR을 확인하세요."
             exit 1
           fi
 
@@ -144,26 +138,24 @@ jobs:
           mv "$BUNDLE_FILE.tmp" "$BUNDLE_FILE"
           cat "$BUNDLE_FILE"
 
-      - name: release 브랜치 커밋 및 push
+      - name: main에 커밋 및 push
         run: |
           set -euo pipefail
 
-          branch="release/${RELEASE_VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git switch -c "$branch"
           mkdir -p releases
           cp "$BUNDLE_FILE" "releases/${RELEASE_VERSION}.yaml"
           git add "releases/${RELEASE_VERSION}.yaml"
           git commit -m "release: ${RELEASE_VERSION} 번들 생성 (FE ${FRONTEND_TAG}, BE ${BACKEND_TAG}, AI ${AI_TAG})"
-          git push origin "$branch"
+          git push origin HEAD:main
 
-          # 실행 결과 화면에 번들 내용과 PR 생성 링크를 남긴다
+          # 실행 결과 화면에 번들 내용과 커밋 링크를 남긴다
           {
             echo "## Release Bundle \`${RELEASE_VERSION}\` 생성 완료"
             echo
-            echo "[main 대상 PR 만들기](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1)"
+            echo "[main 커밋 보기](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/$(git rev-parse HEAD))"
             echo
             echo '```yaml'
             cat "$BUNDLE_FILE"
