@@ -22,8 +22,7 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
     allowed_origins = [
       "https://${var.domain_name}",
       "https://www.${var.domain_name}",
-      "http://127.0.0.1:3000", # 로컬 개발
-      "http://localhost:3000", # 로컬 개발
+      "http://127.0.0.1" # 로컬 개발
     ]
     allowed_headers = ["*"] # BE가 presigned URL과 함께 내려주는 필수 헤더(requiredHeaders)를 그대로 보냄
     expose_headers  = ["ETag"]
