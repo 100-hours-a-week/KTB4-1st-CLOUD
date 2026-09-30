@@ -125,6 +125,23 @@ resource "aws_iam_group_policy" "infra_admin" {
         ]
         Resource = "*"
       },
+      # CloudWatch Logs와 Alarm 기능 허용
+      { Sid = "AllowCloudWatchLogs", Effect = "Allow", Action = "logs:*", Resource = "*" },
+      { Sid = "AllowSNSForAlarms",  Effect = "Allow", Action = "sns:*",  Resource = "*" },
+      {
+        Sid      = "AllowAlarmServiceLinkedRole"
+        Effect   = "Allow"
+        Action   = "iam:CreateServiceLinkedRole"
+        Resource = "*"
+        Condition = { StringEquals = { "iam:AWSServiceName" = "events.amazonaws.com" } }
+      },
+      # 로그 그룹 변경 금지
+      {
+        Sid    = "DenyManagedLogGroupChanges"
+        Effect = "Deny"
+        Action = ["logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy"]
+        Resource = aws_cloudwatch_log_group.containers.arn
+      },
     ]
   })
 }
