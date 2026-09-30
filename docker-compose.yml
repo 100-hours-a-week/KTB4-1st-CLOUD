@@ -52,6 +52,8 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} # AI 서버 Settings.anthropic_api_key (필수값, 없으면 기동 실패)
       - TZ=Asia/Seoul
+      - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN_AI}
+      - SENTRY_DSN=${SENTRY_DSN_AI}
     deploy:
       resources:
         limits:
@@ -95,6 +97,8 @@ services:
       - TZ=Asia/Seoul
       # JVM 힙 메모리를 512MB로 제한하고 GC 오버헤드를 줄이기 위한 옵션
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m
+      - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN_BE}
+      - SENTRY_DSN=${SENTRY_DSN_BE}
     depends_on:
       mysql:
         condition: service_healthy # MySQL 핑 응답 확인 후 구동 시작
