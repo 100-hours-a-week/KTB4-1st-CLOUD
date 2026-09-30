@@ -29,6 +29,7 @@ resource "aws_instance" "v1" {
   root_block_device {
     volume_type = "gp3"
     volume_size = var.data_volume_size_gb
+    delete_on_termination = false
   }
 
   tags = {
