@@ -99,6 +99,9 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
+      # Prometheus
+      - PROMETHEUS_AUTH_USERNAME=${PROMETHEUS_AUTH_USERNAME}
+      - PROMETHEUS_AUTH_PASSWORD=${PROMETHEUS_AUTH_PASSWORD}
     depends_on:
       mysql:
         condition: service_healthy # MySQL 핑 응답 확인 후 구동 시작
