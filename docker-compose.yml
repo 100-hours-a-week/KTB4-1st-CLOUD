@@ -95,6 +95,9 @@ services:
       - TZ=Asia/Seoul
       # JVM 힙 메모리를 512MB로 제한하고 GC 오버헤드를 줄이기 위한 옵션
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m
+      # Prometheus
+      - PROMETHEUS_AUTH_USERNAME=${PROMETHEUS_AUTH_USERNAME}
+      - PROMETHEUS_AUTH_PASSWORD=${PROMETHEUS_AUTH_PASSWORD}
     depends_on:
       mysql:
         condition: service_healthy # MySQL 핑 응답 확인 후 구동 시작
