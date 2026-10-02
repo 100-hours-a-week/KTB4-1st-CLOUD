@@ -131,6 +131,7 @@ services:
       - PORT=3000
       - NODE_OPTIONS=--max-old-space-size=256
       - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     deploy:
       resources:
         limits:
