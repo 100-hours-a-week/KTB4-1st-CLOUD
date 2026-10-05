@@ -87,7 +87,7 @@ resource "aws_route53_health_check" "nginx" {
   fqdn = var.domain_name
   port = 443  # Nginx의 HTTPS 및 SSL 인증서 유효성 동시 검증
   resource_path = "/health"
-  failure_threshold = 3
+  failure_threshold = 2
   request_interval = 30
   enable_sni = true   # Route53 엔드포인트 모니터링 가이드 기준에 따라 SSL 핸드셰이크부터 HTTP 200 응답까지 전체 통신 경로 검증
 
