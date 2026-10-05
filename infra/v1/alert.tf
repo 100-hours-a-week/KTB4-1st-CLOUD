@@ -80,3 +80,78 @@ resource "aws_lambda_event_source_mapping" "alert_sqs_to_lambda" {
   maximum_batching_window_in_seconds = 10 # 10초 동안 모아서 한 번에 전달
   enabled                            = true
 }
+
+# Route53 Health Check
+resource "aws_route53_health_check" "nginx" {
+  type = "HTTPS"
+  fqdn = var.domain_name
+  port = 443  # Nginx의 HTTPS 및 SSL 인증서 유효성 동시 검증
+  resource_path = "/health"
+  failure_threshold = 3
+  request_interval = 30
+  enable_sni = true   # Route53 엔드포인트 모니터링 가이드 기준에 따라 SSL 핸드셰이크부터 HTTP 200 응답까지 전체 통신 경로 검증
+
+  tags = {
+    Name = "bakkucca-nginx-health-check"
+  }
+}
+
+# us-east-1 전용 SNS Topic (SQS 구독)
+resource "aws_sns_topic" "route53_alerts_us_east_1" {
+  provider = aws.us_east_1
+  name = "bakkucca-route53-alerts-us-east-1"
+}
+
+# [us-east-1의 SNS -> ap-northeast-2(서울)의 SQS queue] 이벤트 전달
+resource "aws_sns_topic_subscription" "route53_sns_to_seoul_sqs" {
+  provider = aws.us_east_1
+  endpoint  = aws_sqs_queue.alert_queue.arn
+  protocol  = "sqs"
+  topic_arn = aws_sns_topic.route53_alerts_us_east_1.arn
+}
+
+# SNS -> SQS 메시지 발행 권한 허용
+resource "aws_sqs_queue_policy" "alert_queue_policy" {
+  queue_url = aws_sqs_queue.alert_queue.id
+  policy    = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid = "AllowRoute53SNSToSendMessage"
+        Effect = "Allow"
+        Principal = {
+          Service = "sns.amazonaws.com"
+        }
+        Action = "sqs:SendMessage"
+        Resource = aws_sqs_queue.alert_queue.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_sns_topic.route53_alerts_us_east_1.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+# CloudWatch Alarm
+resource "aws_cloudwatch_metric_alarm" "route53_health_check_alarm" {
+  provider = aws.us_east_1
+  alarm_name          = "bakkucca-nginx-healthcheck-failed"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name = "HealthCheckStatus"
+  namespace = "AWS/Route53"
+  period = 60
+  statistic = "Minimum"
+  threshold = 1
+  alarm_description = "Route53 Health Check: Nginx가 3회 연속 무응답"
+
+  dimensions = {
+    HealthCheckId = aws_route53_health_check.nginx.id
+  }
+
+  alarm_actions = [aws_sns_topic.route53_alerts_us_east_1.arn]
+  ok_actions = [aws_sns_topic.route53_alerts_us_east_1.arn]
+}
+
