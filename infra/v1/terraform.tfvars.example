@@ -1,0 +1,3 @@
+# 이 파일을 terraform.tfvars로 복사해서 채운다. terraform.tfvars는 커밋하지 않는다(.gitignore 처리됨).
+
+ssh_key_path = "~/.ssh/bakkucca_v1.pub"
