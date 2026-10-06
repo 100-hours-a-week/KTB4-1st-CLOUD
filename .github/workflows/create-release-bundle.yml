@@ -87,7 +87,7 @@ jobs:
               exit 1
             fi
 
-            # Docker Registry V2 Manifest Ping (HEAD/GET) & 존재 확인
+            # Manifest Ping (HEAD/GET) & 존재 확인
             MANIFEST_URL="https://ghcr.io/v2/${repo_path}/manifests/${tag}"
             MANIFEST_HEADERS=$(curl -s -i \
               -H "Authorization: Bearer ${BEARER_TOKEN}" \
@@ -204,6 +204,7 @@ jobs:
           echo "manifest_path=${MANIFEST_PATH}" >> $GITHUB_OUTPUT
 
       - name: Commit, Push & Create/Update Release PR
+        id: create-pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUNDLE_VERSION: ${{ inputs.bundle_version }}
@@ -216,7 +217,6 @@ jobs:
         run: |
           BRANCH_NAME="release/${BUNDLE_VERSION}"
           
-          # PR 본문 Markdown 파일 생성
           cat << 'EOF' > pr_template.md
           ## 정기 배포 Release Bundle (${{ env.BUNDLE_VERSION }})
           
@@ -275,6 +275,7 @@ jobs:
             echo "================================================================================"
             echo "✅ [ACT LOCAL TEST] 릴리즈 번들 파일 및 PR 본문 검증 성공!"
             echo "================================================================================"
+            echo "pr_url=(Local act test - PR omitted)" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -284,8 +285,13 @@ jobs:
           
           git checkout -B "$BRANCH_NAME"
           git add "$MANIFEST_PATH"
-          git commit -m "chore(release): generate release bundle manifest for ${BUNDLE_VERSION}"
-          git push origin "$BRANCH_NAME" --force
+          
+          if git diff --staged --quiet; then
+            echo ">>> 변경 사항이 없습니다. commit을 건너뜁니다."
+          else
+            git commit -m "chore(release): generate release bundle manifest for ${BUNDLE_VERSION}"
+            git push origin "$BRANCH_NAME" --force
+          fi
           
           EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --base main --json number --jq '.[0].number')
           
@@ -303,6 +309,11 @@ jobs:
               --body-file pr_template.md
           fi
 
+          # 브랜치 기준으로 생성/수정된 PR의 고유 접속 URL 조회 및 아웃풋 설정
+          PR_URL=$(gh pr view "$BRANCH_NAME" --json url --jq '.url')
+          echo ">>> PR URL 확인 완료: ${PR_URL}"
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+
       - name: Send Discord Notification
         if: always()
         continue-on-error: true
@@ -317,7 +328,7 @@ jobs:
           FE_TAG: ${{ inputs.frontend_tag }}
           DESC: ${{ inputs.description || '정기 릴리즈' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          PR_BRANCH: release/${{ inputs.bundle_version }}
+          PR_URL: ${{ steps.create-pr.outputs.pr_url }}
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then
@@ -345,9 +356,16 @@ jobs:
           esac
           
           TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          PR_URL="${{ github.server_url }}/${{ github.repository }}/pulls"
+
+          # PR URL 존재 여부에 따른 링크 포맷 분기 (성공 시 생성된 PR 직행 링크, 실패 시 미생성 표시)
+          if [[ -n "$PR_URL" && "$PR_URL" =~ ^https:// ]]; then
+            PR_LINK="[🚀 PR 바로가기](${PR_URL})"
+          elif [[ "$PR_URL" == *"Local"* ]]; then
+            PR_LINK="로컬 테스트 모드 (PR 미생성)"
+          else
+            PR_LINK="PR 미생성 (워크플로우 중단/실패)"
+          fi
           
-          # jq를 사용해 Discord Webhook Embed 페이로드 안전 직렬화
           jq -n \
             --arg title "${STATUS_EMOJI} [${WORKFLOW_NAME}]${STATUS_TEXT}" \
             --argjson color "$COLOR" \
@@ -358,7 +376,7 @@ jobs:
           • AI: \`${AI_TAG}\`
           • Frontend: \`${FE_TAG}\`" \
             --arg desc "$DESC" \
-            --arg pr_url "[Pull Request 목록 바로가기](${PR_URL})" \
+            --arg pr_link "$PR_LINK" \
             --arg run_url "[GitHub Actions 실행 로그 확인](${RUN_URL})" \
             --arg time "$TIMESTAMP" \
             '{
@@ -372,7 +390,7 @@ jobs:
                     { name: "배포 요청자", value: $actor, inline: true },
                     { name: "포함된 이미지 버전", value: $images },
                     { name: "릴리즈 설명", value: $desc },
-                    { name: "PR 바로가기", value: $pr_url, inline: true },
+                    { name: "PR 바로가기", value: $pr_link, inline: true },
                     { name: "상세 로그", value: $run_url, inline: true }
                   ],
                   footer: { text: "바꾸까 배포 알림" },
