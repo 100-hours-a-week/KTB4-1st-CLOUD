@@ -127,19 +127,19 @@ resource "aws_iam_group_policy" "infra_admin" {
       },
       # CloudWatch Logs와 Alarm 기능 허용
       { Sid = "AllowCloudWatchLogs", Effect = "Allow", Action = "logs:*", Resource = "*" },
-      { Sid = "AllowSNSForAlarms",  Effect = "Allow", Action = "sns:*",  Resource = "*" },
+      { Sid = "AllowSNSForAlarms", Effect = "Allow", Action = "sns:*", Resource = "*" },
       {
-        Sid      = "AllowAlarmServiceLinkedRole"
-        Effect   = "Allow"
-        Action   = "iam:CreateServiceLinkedRole"
-        Resource = "*"
+        Sid       = "AllowAlarmServiceLinkedRole"
+        Effect    = "Allow"
+        Action    = "iam:CreateServiceLinkedRole"
+        Resource  = "*"
         Condition = { StringEquals = { "iam:AWSServiceName" = "events.amazonaws.com" } }
       },
       # 로그 그룹 변경 금지
       {
-        Sid    = "DenyManagedLogGroupChanges"
-        Effect = "Deny"
-        Action = ["logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy"]
+        Sid      = "DenyManagedLogGroupChanges"
+        Effect   = "Deny"
+        Action   = ["logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy"]
         Resource = aws_cloudwatch_log_group.containers.arn
       },
     ]
@@ -188,4 +188,9 @@ resource "aws_iam_role_policy" "instance_s3" {
 resource "aws_iam_instance_profile" "instance" {
   name = "bakkucca-v1-instance-profile"
   role = aws_iam_role.instance.name
+}
+
+resource "aws_iam_role_policy_attachment" "instance_cw_agent" {
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  role       = aws_iam_role.instance.name
 }
