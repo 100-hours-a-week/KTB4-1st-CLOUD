@@ -29,3 +29,17 @@ provider "aws" {
     }
   }
 }
+
+# Route53 CloudWatch 경보 전용 Provider (버지니아 북부 리전)
+provider "aws" {
+  alias = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project   = "bakkucca"
+      Stage     = "v1"
+      ManagedBy = "terraform"
+    }
+  }
+}

@@ -15,3 +15,9 @@ variable "ssh_key_path" {
   type        = string
   default     = "~/.ssh/bakkucca_v1.pub"
 }
+
+variable "discord_webhook_url" {
+    description = "장애 알림 발송을 위한 디스코드 웹훅 URL"
+    type = string
+    sensitive = true
+}
