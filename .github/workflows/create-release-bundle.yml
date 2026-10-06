@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       bundle_version:
-        description: '릴리즈 번들 버전 (예: v1.1.0)'
+        description: 'Release Bundle 버전 (예: v1.1.0)'
         required: true
         type: string
       backend_tag:
@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       description:
-        description: '릴리즈 변경사항 및 요약 설명'
+        description: 'release 변경사항 및 요약 설명'
         required: false
         default: '정기 릴리즈'
         type: string
@@ -250,6 +250,7 @@ jobs:
           
           ---
           ### 🎶 Release Note
+          ${{ inputs.description }}
           
           EOF
           
