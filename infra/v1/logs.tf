@@ -29,7 +29,7 @@ resource "aws_iam_role_policy" "instance_logs" {
   })
 }
 
-# 팀원 공용 로그 조회 계정 (읽기 전용)
+# 팀원 공용 로그, 지표 조회 계정 (읽기 전용)
 resource "aws_iam_user" "log_viewer" {
   name = "bakkucca-log-viewer"
 }
@@ -37,4 +37,10 @@ resource "aws_iam_user" "log_viewer" {
 resource "aws_iam_user_policy_attachment" "log_viewer_read" {
   user       = aws_iam_user.log_viewer.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess"
+}
+
+# 지표·대시보드·알람 상태 조회 (읽기 전용)
+resource "aws_iam_user_policy_attachment" "log_viewer_metrics_read" {
+  user       = aws_iam_user.log_viewer.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
 }
