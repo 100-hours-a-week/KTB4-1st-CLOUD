@@ -36,11 +36,24 @@ if [[ ! -f "$SHARED_ENV" ]]; then
   exit 3
 fi
 
+# 배포 시작 전 현재 가동 중인 안정 버전 경로 기록 (실패 시 복구 타깃)
+PRE_DEPLOY_CURRENT=""
+if [[ -L "${PROJECT_ROOT}/current" ]] && [[ -e "${PROJECT_ROOT}/current" ]]; then
+  PRE_DEPLOY_CURRENT=$(readlink -f "${PROJECT_ROOT}/current")
+  log "배포 전 활성 버전 확인: $(basename "$PRE_DEPLOY_CURRENT")"
+fi
+
 # 롤백 위임 함수
 trigger_rollback() {
   log "[FAIL] 배포 단계 중 오류 감지. rollback.sh를 호출합니다..."
-  if "${PROJECT_ROOT}/scripts/rollback.sh"; then
-    log "[RECOVERED] 배포는 실패했으나 직전 안정 버전(previous)으로 안전하게 롤백되었습니다."
+
+  if [[ -z "$PRE_DEPLOY_CURRENT" ]]; then
+    log "[FATAL] 직전 안정 버전이 존재하지 않아 롤백할 수 없습니다 (최초 배포 실패)."
+    exit 2
+  fi
+
+  if "${PROJECT_ROOT}/scripts/rollback.sh" "$PRE_DEPLOY_CURRENT"; then
+    log "[RECOVERED] 배포는 실패했으나 직전 안정 버전($(basename "$PRE_DEPLOY_CURRENT"))으로 롤백되었습니다."
     exit 1
   else
     log "[CRITICAL] 배포 실패 및 직전 버전 롤백 복구까지 모두 실패했습니다!"

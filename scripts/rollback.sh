@@ -11,26 +11,39 @@ set -uo pipefail
 PROJECT_ROOT="/opt/app"
 log() { echo "[$(date '+%H:%M:%S')] [ROLLBACK] $*"; }
 
-log "직전 안정 버전(previous) 확인 중..."
+TARGET_DIR="${1:-}"
 
-if [[ ! -L "${PROJECT_ROOT}/previous" ]] || [[ ! -e "${PROJECT_ROOT}/previous" ]]; then
-  log "[FATAL] 롤백할 직전 버전(previous) 심볼릭 링크가 존재하지 않거나 대상 폴더가 유실되었습니다!"
-  exit 1
+if [[ -n "$TARGET_DIR" ]]; then
+  # deploy.sh에서 전달받은 배포 전 활성 버전(PRE_DEPLOY_CURRENT)으로 복구
+  RECOVER_DIR="$TARGET_DIR"
+  if [[ ! -d "$RECOVER_DIR" ]]; then
+    log "[FATAL] 지정된 복구 대상 디렉터리가 존재하지 않습니다: ${RECOVER_DIR}"
+    exit 1
+  fi
+else
+  # 수동 롤백: previous 심볼릭 링크를 기준으로 복구
+  if [[ ! -L "${PROJECT_ROOT}/previous" ]] || [[ ! -e "${PROJECT_ROOT}/previous" ]]; then
+    log "[FATAL] 롤백할 직전 버전(previous) 심볼릭 링크가 존재하지 않거나 대상 폴더가 유실되었습니다!"
+    exit 1
+  fi
+  RECOVER_DIR=$(readlink -f "${PROJECT_ROOT}/previous")
 fi
 
-PREV_DIR=$(readlink -f "${PROJECT_ROOT}/previous")
-PREV_VER=$(basename "$PREV_DIR")
-log "복구 대상 버전 확정: ${PREV_VER} (${PREV_DIR})"
+RECOVER_VER=$(basename "$RECOVER_DIR")
+log "복구 대상 버전 확정: ${RECOVER_VER} (${RECOVER_DIR})"
 
 # current 심볼릭 링크를 previous 대상으로 원자적 교체
-ln -sfn "$PREV_DIR" "${PROJECT_ROOT}/current_tmp"
-mv -Tf "${PROJECT_ROOT}/current_tmp" "${PROJECT_ROOT}/current"
-log "current 심볼릭 링크가 ${PREV_VER} 디렉터리로 복구되었습니다."
+CURRENT_TARGET=$(readlink -f "${PROJECT_ROOT}/current" 2>/dev/null || echo "")
+if [[ "$CURRENT_TARGET" != "$RECOVER_DIR" ]]; then
+  ln -sfn "$RECOVER_DIR" "${PROJECT_ROOT}/current_tmp"
+  mv -Tf "${PROJECT_ROOT}/current_tmp" "${PROJECT_ROOT}/current"
+  log "current 심볼릭 링크가 ${RECOVER_VER} 디렉터리로 복구되었습니다."
+fi
 
 # 직전 안정 버전 컨테이너 구동 (이미 로컬 캐시에 존재하므로 즉시 기동)
-cd "$PREV_DIR"
+cd "$RECOVER_DIR"
 if ! docker compose -p bakkucca up -d --no-deps --wait springboot fastapi nextjs; then
-  log "[FATAL] 직전 컨테이너 기동 실패! 컨테이너 상태를 확인하세요."
+  log "[FATAL] 복구 컨테이너 기동 실패! 컨테이너 상태를 확인하세요."
   docker compose -p bakkucca ps -a
   exit 1
 fi
@@ -45,5 +58,5 @@ if ! "${PROJECT_ROOT}/scripts/verify.sh"; then
   exit 1
 fi
 
-log "[SUCCESS] 직전 안정 버전(${PREV_VER})으로 롤백 및 가용성 복구가 완료되었습니다."
+log "[SUCCESS] 직전 안정 버전(${RECOVER_VER})으로 롤백 및 가용성 복구가 완료되었습니다."
 exit 0
