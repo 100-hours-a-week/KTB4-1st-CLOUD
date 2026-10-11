@@ -123,7 +123,7 @@ jobs:
             GIT_COMMIT_SHA="$(jq -r '.git_commit_sha' <<< "$meta")"
             BUILT_AT="$(jq -r '.built_at' <<< "$meta")"
 
-            if [ -z "$GIT_COMMIT_SHA" ] \vert{}\vert{} [ "$GIT_COMMIT_SHA" = "null" ]; then
+            if [ -z "$GIT_COMMIT_SHA" ] || [ "$GIT_COMMIT_SHA" = "null" ]; then
               echo "::warning::${KEY} 이미지에 org.opencontainers.image.revision 라벨이 없습니다."
               GIT_COMMIT_SHA="unknown"
               GIT_COMMIT_SHORT="unknown"
