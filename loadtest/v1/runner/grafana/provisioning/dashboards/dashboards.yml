@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: loadtest
+    folder: 부하 테스트
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards

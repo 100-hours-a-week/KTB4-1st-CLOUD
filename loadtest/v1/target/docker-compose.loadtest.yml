@@ -1,0 +1,126 @@
+# 서비스 설정을 덮어쓰고 관측 서비스를 추가한다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  springboot:
+    environment:
+      - SENTRY_DSN=http://loadtest@${RUNNER_HOST}:8000/1
+      - AWS_ACCESS_KEY_ID=loadtest-dummy
+      - AWS_SECRET_ACCESS_KEY=loadtest-dummy
+      - SERVER_TOMCAT_MBEANREGISTRY_ENABLED=true
+    ports:
+      - "127.0.0.1:8080:8080"
+  nginx:
+    volumes:
+      - ./certs:/etc/letsencrypt:ro
+      - ./nginx:/etc/nginx/conf.d:ro
+      - nginx-timing:/var/log/nginx-timing
+  alloy:
+    image: grafana/alloy:v1.20.1
+    network_mode: host
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      - RUNNER_HOST=${RUNNER_HOST}
+      - PROMETHEUS_AUTH_USERNAME=${PROMETHEUS_AUTH_USERNAME}
+      - PROMETHEUS_AUTH_PASSWORD=${PROMETHEUS_AUTH_PASSWORD}
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - nginx-timing:/var/log/nginx-timing:ro
+      - alloy-data:/var/lib/alloy/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging: *default-logging
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    network_mode: host
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=127.0.0.1:9100
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    logging: *default-logging
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.60.6
+    privileged: true
+    devices:
+      - /dev/kmsg
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=5s
+      - --store_container_labels=false
+      - --enable_metrics=cpu,memory,network,oom_event,pressure,diskIO
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8088:8080"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    logging: *default-logging
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.20.0
+    command:
+      - --mysqld.address=mysql:3306
+      - --mysqld.username=exporter
+      - --collect.info_schema.innodb_metrics
+    environment:
+      - MYSQLD_EXPORTER_PASSWORD=${MYSQL_EXPORTER_PASSWORD}
+    ports:
+      - "127.0.0.1:9104:9104"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    logging: *default-logging
+    networks:
+      - backend-net
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.5.3
+    command:
+      - --nginx.scrape-uri=http://nginx:8081/stub_status
+    ports:
+      - "127.0.0.1:9113:9113"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+    logging: *default-logging
+    networks:
+      - frontend-net
+
+volumes:
+  nginx-timing:
+  alloy-data:
