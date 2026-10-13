@@ -117,8 +117,8 @@ jobs:
             scripts/verify.sh \
             "$PKG/scripts/"
           
-          # Nginx 설정
-          cp nginx/default.conf "$PKG/shared/nginx/default.conf"
+          cp nginx/default.conf nginx/nginx.conf nginx/api-rate-limit.js nginx/api-rate-limit.conf \
+            "$PKG/shared/nginx/"
           
           # 릴리즈별 배포 파일
           cp \

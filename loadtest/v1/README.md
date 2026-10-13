@@ -35,7 +35,7 @@ terraform -chdir=loadtest/v1/terraform apply
 terraform -chdir=loadtest/v1/terraform output ip
 ```
 
-`terraform output ip`에서 공인·사설 IP를 확인한다. 로컬 터미널에서 아래 두 공인 IP를 실제 값으로 바꿔 설정한다. 사설 IP는 각 원격 `.env`에 넣는다.
+`terraform output ip`에서 공인·사설 IP를 확인한다. EC2를 중지 후 시작했다면 공인 IP는 EC2 콘솔에서 다시 확인한다. 로컬 터미널에서 아래 두 공인 IP를 실제 값으로 바꿔 설정한다. 사설 IP는 각 원격 `.env`에 넣는다.
 
 ```bash
 TARGET_PUBLIC_IP='<target-public-ip>'
@@ -44,6 +44,8 @@ LOADTEST_SSH_KEY="$HOME/.ssh/bakkucca_v1"
 ```
 
 target·runner 공인 IP에 파일을 복사한다.
+
+Docker Compose 2.24.4 이상을 사용한다. target의 테스트 override는 기본 Compose의 사용자별 제한을 제거해 제한 전 상태로 실행한다.
 
 ```bash
 scp -r -i "$LOADTEST_SSH_KEY" loadtest/v1/target "ec2-user@$TARGET_PUBLIC_IP:~/"

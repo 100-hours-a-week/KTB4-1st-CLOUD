@@ -15,7 +15,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
   nginx:
-    volumes:
+    command: [nginx, -g, 'daemon off;']
+    volumes: !override
       - ./certs:/etc/letsencrypt:ro
       - ./nginx:/etc/nginx/conf.d:ro
       - nginx-timing:/var/log/nginx-timing

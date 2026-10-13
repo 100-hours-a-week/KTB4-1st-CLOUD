@@ -95,6 +95,9 @@ fi
 
 # [Step 4] Nginx 업스트림 DNS 리로드 및 2~3단계 검증 (verify.sh 호출)
 log "[4/5] Nginx 리로드 및 애플리케이션 통합 검증 시작"
+if ! docker compose -p bakkucca up -d --no-deps nginx; then
+  trigger_rollback
+fi
 docker compose -p bakkucca exec -T nginx nginx -s reload || true
 
 if ! "${PROJECT_ROOT}/scripts/verify.sh"; then
