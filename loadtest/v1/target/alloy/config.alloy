@@ -1,0 +1,102 @@
+// target 지표를 수집해 runner Prometheus로 전송한다.
+prometheus.remote_write "runner" {
+  endpoint {
+    url = "http://" + sys.env("RUNNER_HOST") + ":9090/api/v1/write"
+  }
+  external_labels = {"host" = "target"}
+}
+
+prometheus.scrape "node" {
+  job_name        = "node"
+  targets         = [{"__address__" = "127.0.0.1:9100"}]
+  scrape_interval = "5s"
+  scrape_timeout  = "4s"
+  forward_to      = [prometheus.remote_write.runner.receiver]
+}
+
+prometheus.scrape "cadvisor" {
+  job_name        = "cadvisor"
+  targets         = [{"__address__" = "127.0.0.1:8088"}]
+  scrape_interval = "5s"
+  scrape_timeout  = "4s"
+  forward_to      = [prometheus.remote_write.runner.receiver]
+}
+
+prometheus.scrape "mysql" {
+  job_name        = "mysql"
+  targets         = [{"__address__" = "127.0.0.1:9104"}]
+  scrape_interval = "5s"
+  scrape_timeout  = "4s"
+  forward_to      = [prometheus.remote_write.runner.receiver]
+}
+
+prometheus.scrape "nginx" {
+  job_name        = "nginx"
+  targets         = [{"__address__" = "127.0.0.1:9113"}]
+  scrape_interval = "5s"
+  scrape_timeout  = "4s"
+  forward_to      = [prometheus.remote_write.runner.receiver]
+}
+
+prometheus.scrape "springboot" {
+  job_name        = "springboot"
+  targets         = [{"__address__" = "127.0.0.1:8080"}]
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "5s"
+  scrape_timeout  = "4s"
+
+  basic_auth {
+    username = sys.env("PROMETHEUS_AUTH_USERNAME")
+    password = sys.env("PROMETHEUS_AUTH_PASSWORD")
+  }
+
+  forward_to = [prometheus.remote_write.runner.receiver]
+}
+
+// 컨테이너·Nginx·커널 로그를 runner Loki로 전송한다.
+loki.write "runner" {
+  endpoint {
+    url = "http://" + sys.env("RUNNER_HOST") + ":3100/loki/api/v1/push"
+  }
+  external_labels = {"host" = "target"}
+}
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.write.runner.receiver]
+}
+
+local.file_match "nginx_timing" {
+  path_targets = [{
+    "__path__"  = "/var/log/nginx-timing/access.json",
+    "container" = "nginx",
+    "log"       = "timing",
+  }]
+}
+
+loki.source.file "nginx_timing" {
+  targets    = local.file_match.nginx_timing.targets
+  forward_to = [loki.write.runner.receiver]
+}
+
+loki.source.journal "kernel" {
+  matches    = "_TRANSPORT=kernel"
+  labels     = {"source" = "kernel"}
+  forward_to = [loki.write.runner.receiver]
+}

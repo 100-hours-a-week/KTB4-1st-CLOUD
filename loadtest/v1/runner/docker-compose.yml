@@ -1,0 +1,93 @@
+# 부하 생성기와 모니터링 서비스를 실행한다.
+name: loadtest-runner
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-remote-write-receiver
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    logging: *default-logging
+  loki:
+    image: grafana/loki:3.7.8
+    command: -config.file=/etc/loki/loki.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+    logging: *default-logging
+  grafana:
+    image: grafana/grafana:13.2.3
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/loadtest.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    logging: *default-logging
+  sentry-sink:
+    image: nginx:alpine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./sentry-sink.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    logging: *default-logging
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    network_mode: host
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=:9100
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+    logging: *default-logging
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: ["k6"]
+    network_mode: host
+    user: "0"
+    ulimits:
+      nofile: 1048576
+    working_dir: /scripts
+    environment:
+      - TARGET_IP=${TARGET_IP}
+      - JWT_SECRET=${JWT_SECRET}
+      - RESULTS_DIR=/results
+      - K6_OUT=experimental-prometheus-rw
+      - K6_PROMETHEUS_RW_SERVER_URL=http://127.0.0.1:9090/api/v1/write
+      - K6_FEATURES=native-histograms
+      - K6_PROMETHEUS_RW_PUSH_INTERVAL=5s
+    volumes:
+      - ${K6_SCRIPTS_DIR:-../normal/k6}:/scripts:ro
+      - ./results:/results
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:

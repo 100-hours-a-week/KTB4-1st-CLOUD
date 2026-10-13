@@ -23,3 +23,8 @@ terraform.rc
 # Secrets
 .env
 !.env.example
+
+# Load tests
+loadtest/**/target/certs/
+loadtest/**/runner/results/
+loadtest/**/attack/nginx/jwt.secret
