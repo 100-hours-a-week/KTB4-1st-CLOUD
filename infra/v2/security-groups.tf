@@ -30,9 +30,9 @@ resource "aws_vpc_security_group_ingress_rule" "kafka_ssh" {
   to_port           = 22
 }
 
-# BE, AI kafka client 요청
+# BE kafka client 요청
 resource "aws_vpc_security_group_ingress_rule" "kafka_clients" {
-  for_each = toset(["be", "ai"])
+  for_each = toset(["be"])
 
   security_group_id            = aws_security_group.kafka.id
   description                  = "Kafka client access from ${each.key}"
