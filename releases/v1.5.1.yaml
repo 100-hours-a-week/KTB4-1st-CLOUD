@@ -1,0 +1,32 @@
+# 이 파일은 create-release-manifest 워크플로우에 의해 자동 생성되었습니다. 직접 수정하지 마세요.
+release_metadata:
+  bundle_version: v1.5.1
+  release_date: "2026-10-13T21:30:42+09:00"
+  released_by: dohyunk58
+  target_environment: production
+  description: 비정기 릴리즈 - 백엔드 카프카 추가
+services:
+  backend:
+    service_name: springboot
+    image_uri: ghcr.io/100-hours-a-week/ktb4-1st-be
+    image_tag: v1.2.1
+    image_digest: sha256:7de8cbe0fef3650b6bfea61f52a988fe1039e7d63c153e94a38d9800d965c672
+    git_commit_sha: 0796156551ebe66c8eb8a505574d409e7546cab2
+    git_commit_short: "0796156"
+    built_at: "2026-10-13T12:19:28.673Z"
+  ai:
+    service_name: fastapi
+    image_uri: ghcr.io/100-hours-a-week/ktb4_1st_ai
+    image_tag: 1.0.0
+    image_digest: sha256:7a392915fe0f7b595726de1df3be2456c1f61eb4ee62ffc3bb7db6aa2a487cd9
+    git_commit_sha: 48be560489b997965453eb0fde383cf4b32072e3
+    git_commit_short: 48be560
+    built_at: "2026-10-01T10:55:48.300Z"
+  frontend:
+    service_name: nextjs
+    image_uri: ghcr.io/100-hours-a-week/ktb4-1st-fe
+    image_tag: 1.4.0
+    image_digest: sha256:32d316b6454dcf3c587daa9a732bc95968447ea57e59bf7a76a526b18a0cf2be
+    git_commit_sha: 9a847170ef60827a71531983348020a1c193997b
+    git_commit_short: 9a84717
+    built_at: "2026-10-11T12:03:51.120Z"
