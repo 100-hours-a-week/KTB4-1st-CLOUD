@@ -76,10 +76,6 @@ resource "aws_ecs_service" "app" {
   lifecycle {
     ignore_changes  = [task_definition, load_balancer] # CodeDeploy가 변경한 태스크 리비전과 대상 그룹을 Terraform이 되돌리지 않도록 설정
     prevent_destroy = true                             # 서비스 삭제가 포함된 Terraform 계획을 차단
-    precondition {
-      condition     = each.key != "be" || var.be_mysql_security_group_id != null
-      error_message = "BE 실행 전에 MySQL 보안그룹 ID를 입력하세요"
-    }
   }
   depends_on = [
     aws_ecs_cluster_capacity_providers.app,
@@ -91,6 +87,5 @@ resource "aws_ecs_service" "app" {
     aws_iam_role_policy.execution_parameters,
     aws_ssm_parameter.service_endpoint,
     aws_iam_role_policy.be_uploads,
-    aws_vpc_security_group_egress_rule.be_data,
   ]
 }
