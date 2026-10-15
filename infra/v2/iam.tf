@@ -81,6 +81,21 @@ resource "aws_iam_role_policy" "execution_secrets" {
   })
 }
 
+# ECS 에이전트에 해당 서비스의 일반 실행 설정 조회만 허용
+resource "aws_iam_role_policy" "execution_parameters" {
+  for_each = local.services
+  name     = "runtime-parameters"
+  role     = aws_iam_role.execution[each.key].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameters"]
+      Resource = values(local.runtime_parameter_arns[each.key])
+    }]
+  })
+}
+
 # 서비스 애플리케이션이 AWS API 호출에 사용할 역할
 resource "aws_iam_role" "task" {
   for_each           = local.services

@@ -1,0 +1,52 @@
+{
+  "family": "${family}",
+  "networkMode": "bridge",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "${execution_role_arn}",
+  "taskRoleArn": "${task_role_arn}",
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": ${jsonencode(image)},
+      "essential": true,
+      "cpu": 256,
+      "memoryReservation": 256,
+      "memory": 256,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "stopTimeout": 120,
+      "secrets": ${jsonencode(runtime_references)},
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -q --spider http://127.0.0.1:3000/api/health/liveness || exit 1"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-group": "${log_group}",
+          "awslogs-stream-prefix": "frontend",
+          "mode": "non-blocking",
+          "max-buffer-size": "4m"
+        }
+      }
+    }
+  ]
+}
