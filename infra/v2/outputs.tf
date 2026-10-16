@@ -105,7 +105,7 @@ locals {
       initial_task_definition_arn = try(aws_ecs_task_definition.app[name].arn, null)
       runtime_secret_arn          = aws_secretsmanager_secret.app[name].arn
       runtime_secret_keys         = local.runtime_secret_keys[name]
-      runtime_parameter_names     = merge(local.runtime_parameter_names[name], name == "be" && var.enable_valkey ? local.valkey_parameter_names : {})
+      runtime_parameter_names     = local.runtime_parameter_names[name]
       managed_parameter_names     = [for key in keys(local.service_endpoint_parameters) : "/${local.name_prefix}/${key}" if startswith(key, "${name}/")]
     }
   }

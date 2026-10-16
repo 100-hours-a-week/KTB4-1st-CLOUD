@@ -8,6 +8,7 @@ locals {
       "FRONTEND_REDIRECT_URI", "PROMETHEUS_AUTH_USERNAME",
       "AI_IMAGE_ANALYSIS_URL", "AI_TEXT_MODERATION_URL", "AI_ITEM_PRICE_URL",
       "CLOUDFRONT_BASE_URL", "CLOUDFRONT_KEY_PAIR_ID", "CLOUDFRONT_SIGNED_URL_DURATION_SECONDS",
+      "SPRING_DATA_REDIS_CLUSTER_NODES", "SPRING_DATA_REDIS_USERNAME", "SPRING_DATA_REDIS_SSL_ENABLED",
     ]
     fe = ["NODE_ENV", "PORT", "HOSTNAME", "NODE_OPTIONS", "BACKEND_API_BASE_URL", "TZ"]
     ai = ["TZ"]
@@ -23,18 +24,21 @@ locals {
     }
   }
 
-  # 인프라 생성 결과로 정해지는 서비스 주소는 Terraform으로 등록
+  # 인프라 생성 결과로 정해지는 일반 설정은 Terraform으로 등록
   service_endpoint_parameters = {
-    "be/AI_IMAGE_ANALYSIS_URL"  = "http://${aws_lb.ai.dns_name}/api/vision/analyze-item"
-    "be/AI_TEXT_MODERATION_URL" = "http://${aws_lb.ai.dns_name}/api/moderation/check-text"
-    "be/AI_ITEM_PRICE_URL"      = "http://${aws_lb.ai.dns_name}/value/estimate-price"
-    "fe/BACKEND_API_BASE_URL"   = "https://${local.alb_origin_name}/api"
-    "be/CLOUDFRONT_BASE_URL"    = "https://${local.domain_name}"
-    "be/CLOUDFRONT_KEY_PAIR_ID" = aws_cloudfront_public_key.images.id
+    "be/AI_IMAGE_ANALYSIS_URL"           = "http://${aws_lb.ai.dns_name}/api/vision/analyze-item"
+    "be/AI_TEXT_MODERATION_URL"          = "http://${aws_lb.ai.dns_name}/api/moderation/check-text"
+    "be/AI_ITEM_PRICE_URL"               = "http://${aws_lb.ai.dns_name}/value/estimate-price"
+    "fe/BACKEND_API_BASE_URL"            = "https://${local.alb_origin_name}/api"
+    "be/CLOUDFRONT_BASE_URL"             = "https://${local.domain_name}"
+    "be/CLOUDFRONT_KEY_PAIR_ID"          = aws_cloudfront_public_key.images.id
+    "be/SPRING_DATA_REDIS_CLUSTER_NODES" = "${aws_elasticache_serverless_cache.valkey.endpoint[0].address}:${aws_elasticache_serverless_cache.valkey.endpoint[0].port}"
+    "be/SPRING_DATA_REDIS_USERNAME"      = local.valkey_username
+    "be/SPRING_DATA_REDIS_SSL_ENABLED"   = "true"
   }
 }
 
-# 서비스 주소와 공개키 ID를 Parameter Store에 저장
+# 인프라가 관리하는 일반 설정을 Parameter Store에 저장
 resource "aws_ssm_parameter" "service_endpoint" {
   for_each = local.service_endpoint_parameters
 
