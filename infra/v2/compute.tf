@@ -1,3 +1,4 @@
+# Kafka EC2에 사용할 최신 ARM64 AMI 조회
 data "aws_ami" "kafka_al2023_arm64" {
   most_recent = true
   owners      = ["amazon"]
@@ -18,6 +19,7 @@ data "aws_ami" "kafka_al2023_arm64" {
   }
 }
 
+# Kafka SSH 접속에 사용할 기존 공개키 조회
 data "aws_key_pair" "kafka_ssh" {
   for_each = toset(["bakkucca-v1", "bakkucca-v1-janna"])
 
@@ -25,6 +27,7 @@ data "aws_key_pair" "kafka_ssh" {
   include_public_key = true
 }
 
+# Kafka 전용 EC2 생성과 SSH 공개키 등록
 resource "aws_instance" "kafka" {
   ami                         = data.aws_ami.kafka_al2023_arm64.id
   instance_type               = "t4g.small"
@@ -57,7 +60,7 @@ resource "aws_instance" "kafka" {
     Name = "${local.name_prefix}-kafka"
   }
 
-  # 최신 AMI 검색 결과가 바뀌어도 Kafka EC2를 자동 교체하지 않는다.
+  # AMI 검색 결과 변경에 따른 Kafka EC2 자동 교체 방지
   lifecycle {
     ignore_changes = [ami]
   }

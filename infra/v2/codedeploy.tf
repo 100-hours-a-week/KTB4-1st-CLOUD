@@ -17,7 +17,7 @@ resource "aws_codedeploy_deployment_group" "app" {
 
   deployment_style {
     deployment_option = "WITH_TRAFFIC_CONTROL" # CodeDeploy가 ALB 트래픽 전환까지 수행
-    deployment_type   = "BLUE_GREEN" # 기존 태스크 세트를 유지하면서 신버전 태스크 세트를 생성
+    deployment_type   = "BLUE_GREEN"           # 기존 태스크 세트를 유지하면서 신버전 태스크 세트를 생성
   }
   # 교체할 태스크가 속한 ECS 클러스터와 서비스 지정
   ecs_service {
