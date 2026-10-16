@@ -80,12 +80,11 @@ output "cloudfront" {
     aliases         = aws_cloudfront_distribution.web.aliases
     static_bucket   = aws_s3_bucket.fe_static.id
     images = {
-      enabled       = local.image_delivery_enabled
       base_url      = "https://${local.domain_name}"
       path_pattern  = "/images/*"
-      public_key_id = try(aws_cloudfront_public_key.images[0].id, null)
-      key_group_id  = try(aws_cloudfront_key_group.images[0].id, null)
-      bucket        = try(data.aws_s3_bucket.uploads[0].bucket, null)
+      public_key_id = aws_cloudfront_public_key.images.id
+      key_group_id  = aws_cloudfront_key_group.images.id
+      bucket        = data.aws_s3_bucket.uploads.bucket
     }
   }
 }

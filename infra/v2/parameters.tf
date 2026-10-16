@@ -1,13 +1,14 @@
 # 서비스별 Parameter Store에 저장할 일반 실행 설정 이름
 locals {
   runtime_parameter_keys = {
-    be = concat([
+    be = [
       "SPRING_PROFILES_ACTIVE", "AWS_REGION", "AWS_S3_BUCKET", "CORS_ALLOWED_ORIGINS", "TZ",
       "JAVA_TOOL_OPTIONS", "SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE",
       "DB_URL", "DB_USERNAME", "KAKAO_CLIENT_ID", "KAKAO_REDIRECT_URI",
       "FRONTEND_REDIRECT_URI", "PROMETHEUS_AUTH_USERNAME",
       "AI_IMAGE_ANALYSIS_URL", "AI_TEXT_MODERATION_URL", "AI_ITEM_PRICE_URL",
-    ], local.image_delivery_enabled ? ["CLOUDFRONT_BASE_URL", "CLOUDFRONT_KEY_PAIR_ID", "CLOUDFRONT_SIGNED_URL_DURATION_SECONDS"] : [])
+      "CLOUDFRONT_BASE_URL", "CLOUDFRONT_KEY_PAIR_ID", "CLOUDFRONT_SIGNED_URL_DURATION_SECONDS",
+    ]
     fe = ["NODE_ENV", "PORT", "HOSTNAME", "NODE_OPTIONS", "BACKEND_API_BASE_URL", "TZ"]
     ai = ["TZ"]
   }
@@ -23,15 +24,14 @@ locals {
   }
 
   # 인프라 생성 결과로 정해지는 서비스 주소는 Terraform으로 등록
-  service_endpoint_parameters = merge({
+  service_endpoint_parameters = {
     "be/AI_IMAGE_ANALYSIS_URL"  = "http://${aws_lb.ai.dns_name}/api/vision/analyze-item"
     "be/AI_TEXT_MODERATION_URL" = "http://${aws_lb.ai.dns_name}/api/moderation/check-text"
     "be/AI_ITEM_PRICE_URL"      = "http://${aws_lb.ai.dns_name}/value/estimate-price"
     "fe/BACKEND_API_BASE_URL"   = "https://${local.alb_origin_name}/api"
-    }, local.image_delivery_enabled ? {
     "be/CLOUDFRONT_BASE_URL"    = "https://${local.domain_name}"
-    "be/CLOUDFRONT_KEY_PAIR_ID" = aws_cloudfront_public_key.images[0].id
-  } : {})
+    "be/CLOUDFRONT_KEY_PAIR_ID" = aws_cloudfront_public_key.images.id
+  }
 }
 
 # 서비스 주소와 공개키 ID를 Parameter Store에 저장

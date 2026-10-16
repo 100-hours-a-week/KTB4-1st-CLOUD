@@ -100,15 +100,12 @@ resource "aws_cloudfront_distribution" "web" {
     }
   }
   # 사용자 업로드 이미지는 기존 S3 버킷에서 조회
-  dynamic "origin" {
-    for_each = local.image_delivery_enabled ? [true] : []
-    content {
-      origin_id                = "uploads"
-      domain_name              = data.aws_s3_bucket.uploads[0].bucket_regional_domain_name
-      origin_access_control_id = aws_cloudfront_origin_access_control.uploads[0].id
-      s3_origin_config {
-        origin_access_identity = ""
-      }
+  origin {
+    origin_id                = "uploads"
+    domain_name              = data.aws_s3_bucket.uploads.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.uploads.id
+    s3_origin_config {
+      origin_access_identity = ""
     }
   }
   # 원본 2. 그 외 요청은 ALB -> 캐시 없이 전달
@@ -147,17 +144,14 @@ resource "aws_cloudfront_distribution" "web" {
     }
   }
   # 이미지 조회에는 BE가 발급한 유효한 CloudFront 서명 필수
-  dynamic "ordered_cache_behavior" {
-    for_each = local.image_delivery_enabled ? [true] : []
-    content {
-      path_pattern           = "/images/*"
-      target_origin_id       = "uploads"
-      viewer_protocol_policy = "https-only"
-      allowed_methods        = ["GET", "HEAD"]
-      cached_methods         = ["GET", "HEAD"]
-      cache_policy_id        = aws_cloudfront_cache_policy.images[0].id
-      trusted_key_groups     = [aws_cloudfront_key_group.images[0].id]
-    }
+  ordered_cache_behavior {
+    path_pattern           = "/images/*"
+    target_origin_id       = "uploads"
+    viewer_protocol_policy = "https-only"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    cache_policy_id        = aws_cloudfront_cache_policy.images.id
+    trusted_key_groups     = [aws_cloudfront_key_group.images.id]
   }
   # 인증 실패와 서버 오류 응답의 캐시 유지 방지
   dynamic "custom_error_response" {

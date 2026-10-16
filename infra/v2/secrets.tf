@@ -1,10 +1,7 @@
 # 서비스별 Secrets Manager JSON에 저장할 실행 비밀값 이름
 locals {
   runtime_secret_keys = {
-    be = concat(
-      ["DB_PASSWORD", "JWT_SECRET", "KAKAO_CLIENT_SECRET", "PROMETHEUS_AUTH_PASSWORD"],
-      local.image_delivery_enabled ? ["CLOUDFRONT_PRIVATE_KEY_PEM"] : []
-    )
+    be = ["DB_PASSWORD", "JWT_SECRET", "KAKAO_CLIENT_SECRET", "PROMETHEUS_AUTH_PASSWORD", "CLOUDFRONT_PRIVATE_KEY_PEM"]
     fe = ["KAKAO_REST_API_KEY", "DISCORD_WEBHOOK_URL"]
     ai = ["ANTHROPIC_API_KEY"]
   }
