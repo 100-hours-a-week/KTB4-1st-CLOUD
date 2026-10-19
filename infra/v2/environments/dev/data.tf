@@ -163,21 +163,21 @@ resource "aws_instance" "data" {
     logging = {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
     compose = {"name": "bakkucca-dev-data", "services": {
         "mysql": {
-            "image": "mysql:8.4", "restart": "unless-stopped", "mem_limit": "384m",
+            "image": "mysql:8.4", "restart": "unless-stopped", "mem_limit": "1g",
             "ports": ["3306:3306"], "stop_grace_period": "1m",
             "environment": {
                 "MYSQL_ROOT_PASSWORD": literal(values["MYSQL_ROOT_PASSWORD"]),
                 "MYSQL_DATABASE": literal(values["MYSQL_DATABASE"]),
                 "MYSQL_USER": literal(values["DB_USERNAME"]),
                 "MYSQL_PASSWORD": literal(values["DB_PASSWORD"]), "TZ": "Asia/Seoul"},
-            "command": ["--innodb-buffer-pool-size=128M", "--performance-schema=OFF", "--max-connections=30", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"],
+            "command": ["--innodb-buffer-pool-size=256M", "--performance-schema=OFF", "--max-connections=40", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"],
             "volumes": ["/srv/bakkucca/mysql:/var/lib/mysql"], "logging": logging,
             "healthcheck": {"test": ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=tcp -h127.0.0.1 -u"$$MYSQL_USER" -D"$$MYSQL_DATABASE" -e "SELECT 1"' ], "interval": "10s", "timeout": "5s", "retries": 12, "start_period": "30s"}},
         "valkey": {
-            "image": "valkey/valkey:8", "restart": "unless-stopped", "mem_limit": "384m",
+            "image": "valkey/valkey:8", "restart": "unless-stopped", "mem_limit": "500m",
             "ports": ["6379:6379"],
             "environment": {"REDISCLI_AUTH": literal(values["SPRING_DATA_REDIS_PASSWORD"])},
-            "command": ["valkey-server", "--requirepass", literal(values["SPRING_DATA_REDIS_PASSWORD"]), "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction"],
+            "command": ["valkey-server", "--requirepass", literal(values["SPRING_DATA_REDIS_PASSWORD"]), "--appendonly", "yes", "--maxmemory", "300mb", "--maxmemory-policy", "noeviction"],
             "volumes": ["/srv/bakkucca/valkey:/data"], "logging": logging,
             "healthcheck": {"test": ["CMD", "valkey-cli", "ping"], "interval": "10s", "timeout": "5s", "retries": 12}}
     }}
