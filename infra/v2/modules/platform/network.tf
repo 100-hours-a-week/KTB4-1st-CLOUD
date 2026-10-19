@@ -1,14 +1,6 @@
-# 퍼블릭 서브넷의 AZ와 CIDR 정의
-locals {
-  public_subnets = {
-    ap-northeast-2a = "10.20.0.0/24"
-    ap-northeast-2c = "10.20.1.0/24"
-  }
-}
-
 # v2 서비스 전용 VPC 생성
 resource "aws_vpc" "prod" {
-  cidr_block           = "10.20.0.0/16"
+  cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -28,7 +20,7 @@ resource "aws_internet_gateway" "prod" {
 
 # 두 AZ에 퍼블릭 서브넷 생성
 resource "aws_subnet" "public" {
-  for_each = local.public_subnets
+  for_each = var.public_subnets
 
   vpc_id                  = aws_vpc.prod.id
   availability_zone       = each.key

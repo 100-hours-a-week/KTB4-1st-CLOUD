@@ -57,14 +57,14 @@ resource "aws_launch_template" "app" {
   }
 }
 
-# 두 AZ에서 서비스별 EC2를 최소 2대와 최대 4대로 운영
+# 환경별 서비스 용량에 맞춰 ASG 범위 설정
 resource "aws_autoscaling_group" "app" {
   for_each = local.services
 
   name                      = "${local.name_prefix}-${each.key}"
-  min_size                  = 2
-  max_size                  = 4
-  desired_capacity          = 2
+  min_size                  = var.service_capacity[each.key].min
+  max_size                  = var.service_capacity[each.key].max
+  desired_capacity          = var.service_capacity[each.key].desired
   protect_from_scale_in     = true
   health_check_type         = "EC2"
   health_check_grace_period = 180

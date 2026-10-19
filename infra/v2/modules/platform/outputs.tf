@@ -1,6 +1,6 @@
 # 생성한 VPC ID 출력
 output "vpc_id" {
-  description = "Prod VPC ID"
+  description = "Environment VPC ID"
   value       = aws_vpc.prod.id
 }
 
@@ -93,20 +93,19 @@ output "cloudfront" {
 locals {
   service_outputs = {
     for name in keys(local.services) : name => {
-      cluster_name                = aws_ecs_cluster.app[name].name
-      service_name                = "${local.name_prefix}-${name}"
-      autoscaling_group           = aws_autoscaling_group.app[name].name
-      capacity_provider           = aws_ecs_capacity_provider.app[name].name
-      codedeploy_app              = aws_codedeploy_app.app[name].name
-      codedeploy_group            = try(aws_codedeploy_deployment_group.app[name].deployment_group_name, null)
-      log_group                   = aws_cloudwatch_log_group.app[name].name
-      task_role_arn               = aws_iam_role.task[name].arn
-      execution_role_arn          = aws_iam_role.execution[name].arn
-      initial_task_definition_arn = try(aws_ecs_task_definition.app[name].arn, null)
-      runtime_secret_arn          = aws_secretsmanager_secret.app[name].arn
-      runtime_secret_keys         = local.runtime_secret_keys[name]
-      runtime_parameter_names     = local.runtime_parameter_names[name]
-      managed_parameter_names     = [for key in keys(local.service_endpoint_parameters) : "/${local.name_prefix}/${key}" if startswith(key, "${name}/")]
+      cluster_name                  = aws_ecs_cluster.app[name].name
+      service_name                  = "${local.name_prefix}-${name}"
+      autoscaling_group             = aws_autoscaling_group.app[name].name
+      capacity_provider             = aws_ecs_capacity_provider.app[name].name
+      codedeploy_app                = aws_codedeploy_app.app[name].name
+      codedeploy_group              = try(aws_codedeploy_deployment_group.app[name].deployment_group_name, null)
+      log_group                     = aws_cloudwatch_log_group.app[name].name
+      task_role_arn                 = aws_iam_role.task[name].arn
+      execution_role_arn            = aws_iam_role.execution[name].arn
+      initial_task_definition_arn   = try(aws_ecs_task_definition.app[name].arn, null)
+      runtime_secure_parameter_keys = local.runtime_secure_parameter_keys[name]
+      runtime_parameter_names       = local.runtime_parameter_names[name]
+      managed_parameter_names       = [for key in keys(local.service_endpoint_parameters) : "/${local.name_prefix}/${key}" if startswith(key, "${name}/")]
     }
   }
 }
@@ -139,4 +138,14 @@ output "fe_task_definition_template" {
 output "ai_task_definition_template" {
   description = "AI task definition template for the deployment workflow"
   value       = local.task_definition_templates.ai
+}
+
+# 캐시 사용자를 생성할 때 조회할 BE 비밀번호 파라미터
+output "redis_password_parameter_arn" {
+  value = "arn:aws:ssm:ap-northeast-2:${data.aws_caller_identity.current.account_id}:parameter/${local.name_prefix}/be/SPRING_DATA_REDIS_PASSWORD"
+}
+
+# 환경별 업로드 대상 버킷 이름
+output "uploads_bucket" {
+  value = data.aws_s3_bucket.uploads.bucket
 }

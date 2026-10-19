@@ -28,7 +28,7 @@ resource "aws_cloudfront_origin_access_control" "fe_static" {
 resource "aws_acm_certificate" "cloudfront" {
   provider                  = aws.us_east_1
   domain_name               = local.domain_name
-  subject_alternative_names = ["www.${local.domain_name}"]
+  subject_alternative_names = slice(local.web_domains, 1, length(local.web_domains))
   validation_method         = "DNS"
   lifecycle {
     create_before_destroy = true
@@ -40,7 +40,7 @@ resource "aws_acm_certificate_validation" "cloudfront" {
   provider        = aws.us_east_1
   certificate_arn = aws_acm_certificate.cloudfront.arn
   validation_record_fqdns = [
-    for domain in [local.domain_name, "www.${local.domain_name}"] : aws_route53_record.alb_certificate[domain].fqdn
+    for domain in local.web_domains : aws_route53_record.alb_certificate[domain].fqdn
   ]
 }
 
@@ -87,7 +87,7 @@ resource "aws_cloudfront_cache_policy" "static" {
 resource "aws_cloudfront_distribution" "web" {
   enabled         = true
   is_ipv6_enabled = true
-  aliases         = [local.domain_name, "www.${local.domain_name}"]
+  aliases         = local.web_domains
   comment         = "${local.name_prefix} web"
 
   # 원본 1. 정적 파일 경로: 캐시를 채우거나 재검증할 원본 경로 = S3
@@ -95,18 +95,12 @@ resource "aws_cloudfront_distribution" "web" {
     origin_id                = "fe-static"
     domain_name              = aws_s3_bucket.fe_static.bucket_regional_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.fe_static.id
-    s3_origin_config {
-      origin_access_identity = ""
-    }
   }
   # 사용자 업로드 이미지는 기존 S3 버킷에서 조회
   origin {
     origin_id                = "uploads"
     domain_name              = data.aws_s3_bucket.uploads.bucket_regional_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.uploads.id
-    s3_origin_config {
-      origin_access_identity = ""
-    }
   }
   # 원본 2. 그 외 요청은 ALB -> 캐시 없이 전달
   origin {
@@ -191,4 +185,17 @@ resource "aws_s3_bucket_policy" "fe_static" {
     }]
   })
   depends_on = [aws_s3_bucket_public_access_block.fe_static]
+}
+
+# 개발과 스테이징의 서비스 도메인을 CloudFront에 연결
+resource "aws_route53_record" "web" {
+  for_each = var.environment == "prod" ? toset([]) : toset(["A", "AAAA"])
+  zone_id  = data.aws_route53_zone.public.zone_id
+  name     = local.domain_name
+  type     = each.key
+  alias {
+    name                   = aws_cloudfront_distribution.web.domain_name
+    zone_id                = aws_cloudfront_distribution.web.hosted_zone_id
+    evaluate_target_health = false
+  }
 }

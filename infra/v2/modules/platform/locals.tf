@@ -1,7 +1,8 @@
 # 서비스 이름과 도메인 정의
 locals {
-  name_prefix     = "bakkucca-v2-prod"
-  domain_name     = "bakkucca.com"
+  name_prefix     = "bakkucca-v2-${var.environment}"
+  domain_name     = var.domain_name
+  web_domains     = var.environment == "prod" ? [var.domain_name, "www.${var.domain_name}"] : [var.domain_name]
   alb_origin_name = "origin.${local.domain_name}"
 
   # 서비스별 컨테이너와 헬스 체크 설정
@@ -45,7 +46,7 @@ locals {
       Name         = "${local.name_prefix}-${name}"
       Project      = "bakkucca"
       InfraVersion = "v2"
-      Environment  = "prod"
+      Environment  = var.environment
       ManagedBy    = "terraform"
     }
   }

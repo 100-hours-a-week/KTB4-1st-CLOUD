@@ -3,7 +3,7 @@ resource "aws_security_group" "app" {
   for_each = toset(["be", "fe", "ai"])
 
   name        = "${local.name_prefix}-${each.key}-sg"
-  description = "Bakkucca v2 prod ${each.key} security group"
+  description = "Bakkucca v2 ${var.environment} ${each.key} security group"
   vpc_id      = aws_vpc.prod.id
 
   tags = {
@@ -14,7 +14,7 @@ resource "aws_security_group" "app" {
 # Kafka EC2의 통신 규칙을 적용할 보안그룹 생성
 resource "aws_security_group" "kafka" {
   name        = "${local.name_prefix}-kafka-sg"
-  description = "Bakkucca v2 prod Kafka security group"
+  description = "Bakkucca v2 ${var.environment} Kafka security group"
   vpc_id      = aws_vpc.prod.id
 
   tags = {

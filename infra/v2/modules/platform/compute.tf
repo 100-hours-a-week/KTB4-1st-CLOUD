@@ -51,7 +51,7 @@ resource "aws_instance" "kafka" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 20
+    volume_size           = var.environment == "prod" ? 20 : 10
     encrypted             = true
     delete_on_termination = false
   }

@@ -12,16 +12,19 @@
   "taskRoleArn": "${task_role_arn}",
   "containerDefinitions": [
     {
-      "name": "backend",
+      "name": "ai",
       "image": ${jsonencode(image)},
+      "repositoryCredentials": {
+        "credentialsParameter": ${jsonencode(registry_secret_arn)}
+      },
       "essential": true,
       "cpu": 256,
-      "memoryReservation": 512,
-      "memory": 1024,
+      "memoryReservation": 256,
+      "memory": 256,
       "portMappings": [
         {
-          "containerPort": 8080,
-          "hostPort": 8080,
+          "containerPort": 8000,
+          "hostPort": 8000,
           "protocol": "tcp"
         }
       ],
@@ -30,19 +33,19 @@
       "healthCheck": {
         "command": [
           "CMD-SHELL",
-          "wget -q --spider http://127.0.0.1:8080/actuator/health/liveness || exit 1"
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/liveness', timeout=3)\" || exit 1"
         ],
         "interval": 15,
         "timeout": 5,
         "retries": 3,
-        "startPeriod": 60
+        "startPeriod": 30
       },
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-region": "ap-northeast-2",
           "awslogs-group": "${log_group}",
-          "awslogs-stream-prefix": "backend",
+          "awslogs-stream-prefix": "ai",
           "mode": "non-blocking",
           "max-buffer-size": "4m"
         }

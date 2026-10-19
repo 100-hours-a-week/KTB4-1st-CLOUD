@@ -1,0 +1,13 @@
+# 최초 이미지는 releases/v1.5.1.yaml의 서비스별 digest 사용
+# 기존 서비스를 관리 중이면 기존 initial_image_digests 입력 유지
+
+# 캐시 비밀번호 변경 후 증가
+password_version = 1
+
+# 시험용 v1 준비 후 해당 네트워크 입력
+# v1_network = {
+#   vpc_id = "vpc-..."
+#   cidr_block = "10.50.0.0/16"
+#   route_table_id = "rtb-..."
+#   security_group_id = "sg-..."
+# }

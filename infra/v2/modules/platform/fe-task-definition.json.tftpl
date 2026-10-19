@@ -14,6 +14,9 @@
     {
       "name": "frontend",
       "image": ${jsonencode(image)},
+      "repositoryCredentials": {
+        "credentialsParameter": ${jsonencode(registry_secret_arn)}
+      },
       "essential": true,
       "cpu": 256,
       "memoryReservation": 256,

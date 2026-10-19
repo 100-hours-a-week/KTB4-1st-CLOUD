@@ -19,7 +19,7 @@ resource "aws_ecs_capacity_provider" "app" {
       status                    = "ENABLED" # 태스크를 배치할 용량이 부족하면 EC2 증설
       target_capacity           = 100
       minimum_scaling_step_size = 1
-      maximum_scaling_step_size = 2
+      maximum_scaling_step_size = var.service_capacity[each.key].desired
       instance_warmup_period    = 180
     }
   }
@@ -37,16 +37,16 @@ resource "aws_ecs_cluster_capacity_providers" "app" {
   }
 }
 
-# 서비스별 태스크 2개를 실행하고 CodeDeploy 배포 적용
+# 환경별 태스크 수와 CodeDeploy 배포 적용
 resource "aws_ecs_service" "app" {
   for_each = local.active_services
 
   name                              = "${local.name_prefix}-${each.key}"
   cluster                           = aws_ecs_cluster.app[each.key].id
   task_definition                   = aws_ecs_task_definition.app[each.key].arn
-  desired_count                     = 2    # 평시 실행할 태스크 수
-  health_check_grace_period_seconds = 120  # 시작 직후 헬스 체크 실패로 태스크를 교체하지 않도록 유예
-  wait_for_steady_state             = true # Terraform이 서비스 안정화까지 대기
+  desired_count                     = var.service_capacity[each.key].desired
+  health_check_grace_period_seconds = 120   # 시작 직후 헬스 체크 실패로 태스크를 교체하지 않도록 유예
+  wait_for_steady_state             = false # CodeDeploy 서비스의 안정화는 배포 단계에서 확인
 
   # 버전 배포를 CodeDeploy가 제어
   deployment_controller {
@@ -83,8 +83,8 @@ resource "aws_ecs_service" "app" {
     aws_lb_listener_rule.be,
     aws_lb_listener.ai,
     aws_iam_role_policy.execution_logs,
-    aws_iam_role_policy.execution_secrets,
     aws_iam_role_policy.execution_parameters,
+    aws_iam_role_policy.execution_registry,
     aws_ssm_parameter.service_endpoint,
     aws_iam_role_policy.be_uploads,
   ]

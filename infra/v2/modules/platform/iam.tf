@@ -66,22 +66,7 @@ resource "aws_iam_role_policy" "execution_logs" {
   })
 }
 
-# ECS 에이전트에 해당 서비스의 실행 비밀값 조회만 허용
-resource "aws_iam_role_policy" "execution_secrets" {
-  for_each = local.services
-  name     = "runtime-secrets"
-  role     = aws_iam_role.execution[each.key].id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = aws_secretsmanager_secret.app[each.key].arn
-    }]
-  })
-}
-
-# ECS 에이전트에 해당 서비스의 일반 실행 설정 조회만 허용
+# ECS 에이전트에 해당 서비스의 일반 설정과 비밀값 조회 허용
 resource "aws_iam_role_policy" "execution_parameters" {
   for_each = local.services
   name     = "runtime-parameters"
@@ -92,6 +77,21 @@ resource "aws_iam_role_policy" "execution_parameters" {
       Effect   = "Allow"
       Action   = ["ssm:GetParameters"]
       Resource = values(local.runtime_parameter_arns[each.key])
+    }]
+  })
+}
+
+# ECS 에이전트에 공통 GHCR 인증정보 조회만 허용
+resource "aws_iam_role_policy" "execution_registry" {
+  for_each = local.services
+  name     = "ghcr-pull"
+  role     = aws_iam_role.execution[each.key].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = data.aws_secretsmanager_secret.ghcr.arn
     }]
   })
 }
@@ -115,7 +115,7 @@ resource "aws_iam_role_policy" "be_uploads" {
         "s3:PutObject", "s3:GetObject", "s3:DeleteObject",
         "s3:PutObjectTagging", "s3:GetObjectTagging",
       ]
-      Resource = "arn:aws:s3:::bakkucca-uploads/*"
+      Resource = "${data.aws_s3_bucket.uploads.arn}/*"
     }]
   })
 }

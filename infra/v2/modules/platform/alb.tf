@@ -1,14 +1,14 @@
 # alb.tf: ALB 2개, HTTPS 인증서, 요청 라우팅, 서비스별 대상 그룹을 설정하는 파일
 # 서비스 도메인의 기존 퍼블릭 DNS 영역 조회
 data "aws_route53_zone" "public" {
-  name         = local.domain_name
+  name         = var.hosted_zone_name
   private_zone = false
 }
 
 # 서비스와 ALB 원본 도메인의 HTTPS 인증서 발급
 resource "aws_acm_certificate" "alb" {
   domain_name               = local.domain_name
-  subject_alternative_names = ["www.${local.domain_name}", local.alb_origin_name]
+  subject_alternative_names = concat(slice(local.web_domains, 1, length(local.web_domains)), [local.alb_origin_name])
   validation_method         = "DNS"
   lifecycle {
     create_before_destroy = true
@@ -123,13 +123,13 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# API와 WebSocket 요청을 BE로 전달하고 API 접두사 제거
+# API, WebSocket, 카카오 콜백 요청을 BE로 전달하고 API 접두사 제거
 resource "aws_lb_listener_rule" "be" {
   listener_arn = aws_lb_listener.https.arn
   priority     = 10
   condition {
     path_pattern {
-      values = ["/api", "/api/*", "/ws", "/ws/*"]
+      values = ["/api", "/api/*", "/ws", "/ws/*", "/auth/kakao/callback"]
     }
   }
   transform {
