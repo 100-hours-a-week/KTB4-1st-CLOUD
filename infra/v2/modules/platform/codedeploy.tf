@@ -39,15 +39,15 @@ resource "aws_codedeploy_deployment_group" "app" {
       }
     }
   }
-  # 트래픽 전환 후 구버전 태스크를 10분간 유지
+  # 트래픽 전환 후 구버전 태스크를 개발과 스테이징 1분, 운영 10분간 유지
   blue_green_deployment_config {
     deployment_ready_option {
       action_on_timeout = "CONTINUE_DEPLOYMENT" # 배포 준비 단계에서 별도 승인 대기를 두지 않고 계속 진행
     }
-    # 배포 성공 후 기존 태스크 세트 10분 후 종료
+    # 개발과 스테이징의 배포 대기를 줄이고 운영의 관찰 시간은 유지
     terminate_blue_instances_on_deployment_success {
       action                           = "TERMINATE"
-      termination_wait_time_in_minutes = 10
+      termination_wait_time_in_minutes = var.environment == "prod" ? 10 : 1
     }
   }
   # 배포 실패나 중지 발생 시 이전 버전으로 롤백
