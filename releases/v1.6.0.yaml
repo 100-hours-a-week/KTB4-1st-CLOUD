@@ -1,0 +1,32 @@
+# 이 파일은 create-release-manifest 워크플로우에 의해 자동 생성되었습니다. 직접 수정하지 마세요.
+release_metadata:
+  bundle_version: v1.6.0
+  release_date: "2026-10-19T10:06:16+09:00"
+  released_by: dohyunk58
+  target_environment: production
+  description: 정기 릴리즈
+services:
+  backend:
+    service_name: springboot
+    image_uri: ghcr.io/100-hours-a-week/ktb4-1st-be
+    image_tag: v2.0.0
+    image_digest: sha256:ca0a0115d9054c8422f6369a04bead2b2de02c11ffc4d016c1a4eae0376ce3fa
+    git_commit_sha: 30ca569d8d9d0364326cc4a90adb748a219d07fe
+    git_commit_short: 30ca569
+    built_at: "2026-10-19T01:03:46.532Z"
+  ai:
+    service_name: fastapi
+    image_uri: ghcr.io/100-hours-a-week/ktb4_1st_ai
+    image_tag: 1.0.0
+    image_digest: sha256:7a392915fe0f7b595726de1df3be2456c1f61eb4ee62ffc3bb7db6aa2a487cd9
+    git_commit_sha: 48be560489b997965453eb0fde383cf4b32072e3
+    git_commit_short: 48be560
+    built_at: "2026-10-01T10:55:48.300Z"
+  frontend:
+    service_name: nextjs
+    image_uri: ghcr.io/100-hours-a-week/ktb4-1st-fe
+    image_tag: 2.0.0
+    image_digest: sha256:e95f8d74c5d9633c4fa36ba5c61ec898b2de86c49a980597c515c32ba4251d32
+    git_commit_sha: 4bb3f363000bdee872ff96b329a1dd6d1582e93f
+    git_commit_short: 4bb3f36
+    built_at: "2026-10-18T12:57:46.264Z"
