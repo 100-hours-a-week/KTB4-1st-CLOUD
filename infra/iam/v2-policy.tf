@@ -28,7 +28,7 @@ resource "aws_iam_policy" "infra_v2" {
         Effect = "Allow"
         Action = [
           "ecs:*", "autoscaling:*", "elasticloadbalancing:*",
-          "codedeploy:*", "elasticache:*",
+          "codedeploy:*", "elasticache:*", "rds:*",
         ]
         Resource  = "*"
         Condition = { StringEquals = { "aws:RequestedRegion" = "ap-northeast-2" } }
@@ -152,7 +152,7 @@ resource "aws_iam_policy" "infra_v2" {
         Resource = "${local.role_prefix}/aws-service-role/*"
         Condition = { StringEquals = { "iam:AWSServiceName" = [
           "ecs.amazonaws.com", "autoscaling.amazonaws.com",
-          "elasticloadbalancing.amazonaws.com", "elasticache.amazonaws.com",
+          "elasticloadbalancing.amazonaws.com", "elasticache.amazonaws.com", "rds.amazonaws.com",
         ] } }
       },
     ]
