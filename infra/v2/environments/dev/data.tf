@@ -3,7 +3,7 @@ data "aws_ssm_parameter" "mysql_database" {
   name = "/bakkucca-v2-dev/data/MYSQL_DATABASE"
 }
 
-# 개발 MySQL과 Valkey를 실행할 ARM64 AMI 조회
+# 개발 MySQL과 Valkey 및 Kafka를 실행할 ARM64 AMI 조회
 data "aws_ami" "data" {
   most_recent = true
   owners      = ["amazon"]
@@ -21,7 +21,7 @@ data "aws_ami" "data" {
   }
 }
 
-# 개발 BE에서만 DB와 캐시 접속 허용
+# 개발 BE에서만 DB와 캐시 및 Kafka 접속 허용
 resource "aws_security_group" "data" {
   name        = "bakkucca-v2-dev-data-sg"
   description = "Development MySQL and Valkey"
@@ -29,7 +29,7 @@ resource "aws_security_group" "data" {
   tags        = { Name = "bakkucca-v2-dev-data-sg" }
 }
 resource "aws_vpc_security_group_ingress_rule" "data_be" {
-  for_each                     = toset(["3306", "6379"])
+  for_each                     = toset(["3306", "6379", "9092"])
   security_group_id            = aws_security_group.data.id
   referenced_security_group_id = module.platform.security_group_ids.be
   ip_protocol                  = "tcp"
@@ -39,7 +39,7 @@ resource "aws_vpc_security_group_ingress_rule" "data_be" {
 
 # 개발 BE의 데이터 서버 목적지 아웃바운드 허용
 resource "aws_vpc_security_group_egress_rule" "be_data" {
-  for_each                     = toset(["3306", "6379"])
+  for_each                     = toset(["3306", "6379", "9092"])
   security_group_id            = module.platform.security_group_ids.be
   referenced_security_group_id = aws_security_group.data.id
   ip_protocol                  = "tcp"
@@ -121,7 +121,7 @@ resource "aws_instance" "data" {
     curl -fsSL --retry 5 https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-aarch64 -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod 755 /usr/local/lib/docker/cli-plugins/docker-compose
 
-    for entry in mysql:${aws_ebs_volume.data["mysql"].id} valkey:${aws_ebs_volume.data["valkey"].id}; do
+    for entry in mysql:${aws_ebs_volume.data["mysql"].id} valkey:${aws_ebs_volume.data["valkey"].id} kafka:${aws_ebs_volume.data["kafka"].id}; do
       data_name=$(echo "$entry" | cut -d: -f1)
       volume_id=$(echo "$entry" | cut -d: -f2 | tr -d '-')
       device="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$volume_id"
@@ -139,6 +139,8 @@ resource "aws_instance" "data" {
       grep -q "UUID=$uuid " /etc/fstab || echo "UUID=$uuid /srv/bakkucca/$data_name ext4 defaults,nofail 0 2" >> /etc/fstab
       mountpoint -q "/srv/bakkucca/$data_name" || mount "/srv/bakkucca/$data_name"
     done
+
+    chown 1000:1000 /srv/bakkucca/kafka
 
     cat > /opt/bakkucca-data/start.py <<'PYTHON'
     import json
@@ -160,26 +162,56 @@ resource "aws_instance" "data" {
     def literal(value):
         return str(value).replace("$", "$$")
 
+    # Kafka 클라이언트가 데이터 EC2의 사설 주소로 재접속하도록 설정
+    import urllib.request
+    metadata = "http://169.254.169.254/latest/"
+    token = urllib.request.urlopen(urllib.request.Request(metadata + "api/token", method="PUT", headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"}), timeout=5).read().decode()
+    private_ip = urllib.request.urlopen(urllib.request.Request(metadata + "meta-data/local-ipv4", headers={"X-aws-ec2-metadata-token": token}), timeout=5).read().decode()
+
     logging = {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
     compose = {"name": "bakkucca-dev-data", "services": {
         "mysql": {
-            "image": "mysql:8.4", "restart": "unless-stopped", "mem_limit": "1g",
+            "image": "mysql:8.4", "restart": "unless-stopped", "mem_limit": "640m",
             "ports": ["3306:3306"], "stop_grace_period": "1m",
             "environment": {
                 "MYSQL_ROOT_PASSWORD": literal(values["MYSQL_ROOT_PASSWORD"]),
                 "MYSQL_DATABASE": literal(values["MYSQL_DATABASE"]),
                 "MYSQL_USER": literal(values["DB_USERNAME"]),
                 "MYSQL_PASSWORD": literal(values["DB_PASSWORD"]), "TZ": "Asia/Seoul"},
-            "command": ["--innodb-buffer-pool-size=256M", "--performance-schema=OFF", "--max-connections=40", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"],
+            "command": ["--innodb-buffer-pool-size=128M", "--performance-schema=OFF", "--max-connections=40", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"],
             "volumes": ["/srv/bakkucca/mysql:/var/lib/mysql"], "logging": logging,
-            "healthcheck": {"test": ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=tcp -h127.0.0.1 -u"$$MYSQL_USER" -D"$$MYSQL_DATABASE" -e "SELECT 1"' ], "interval": "10s", "timeout": "5s", "retries": 12, "start_period": "30s"}},
+            "healthcheck": {"test": ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=tcp -h127.0.0.1 -u"$$MYSQL_USER" -D"$$MYSQL_DATABASE" -e "SELECT 1"' ], "interval": "10s", "timeout": "5s", "retries": 12, "start_period": "60s"}},
         "valkey": {
-            "image": "valkey/valkey:8", "restart": "unless-stopped", "mem_limit": "500m",
+            "image": "valkey/valkey:8", "restart": "unless-stopped", "mem_limit": "192m",
             "ports": ["6379:6379"],
             "environment": {"REDISCLI_AUTH": literal(values["SPRING_DATA_REDIS_PASSWORD"])},
-            "command": ["valkey-server", "--requirepass", literal(values["SPRING_DATA_REDIS_PASSWORD"]), "--appendonly", "yes", "--maxmemory", "300mb", "--maxmemory-policy", "noeviction"],
+            "command": ["valkey-server", "--requirepass", literal(values["SPRING_DATA_REDIS_PASSWORD"]), "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"],
             "volumes": ["/srv/bakkucca/valkey:/data"], "logging": logging,
-            "healthcheck": {"test": ["CMD", "valkey-cli", "ping"], "interval": "10s", "timeout": "5s", "retries": 12}}
+            "healthcheck": {"test": ["CMD", "valkey-cli", "ping"], "interval": "10s", "timeout": "5s", "retries": 12}},
+        # 개발용 단일 브로커와 컨트롤러를 한 컨테이너에서 실행
+        "kafka": {
+            "image": "apache/kafka:4.3.1", "restart": "unless-stopped", "mem_limit": "768m",
+            "network_mode": "host",
+            "environment": {
+                "CLUSTER_ID": "4L6g3nShT-eMCtK--X86sw", "KAFKA_NODE_ID": "1",
+                "KAFKA_PROCESS_ROLES": "broker,controller",
+                "KAFKA_LISTENERS": "PLAINTEXT://0.0.0.0:9092,CONTROLLER://127.0.0.1:9093",
+                "KAFKA_ADVERTISED_LISTENERS": "PLAINTEXT://" + private_ip + ":9092",
+                "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT",
+                "KAFKA_INTER_BROKER_LISTENER_NAME": "PLAINTEXT",
+                "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
+                "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@127.0.0.1:9093",
+                "KAFKA_NUM_PARTITIONS": "1", "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
+                "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1", "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
+                "KAFKA_LOG_DIRS": "/var/lib/kafka/data",
+                "KAFKA_HEAP_OPTS": "-Xms128m -Xmx256m",
+                "KAFKA_JVM_PERFORMANCE_OPTS": "-server -XX:+UseG1GC -XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -Xss512k",
+                "KAFKA_NUM_NETWORK_THREADS": "2", "KAFKA_NUM_IO_THREADS": "2",
+                "KAFKA_LOG_RETENTION_HOURS": "24", "KAFKA_LOG_RETENTION_BYTES": "536870912",
+                "KAFKA_LOG_SEGMENT_BYTES": "134217728"},
+            "volumes": ["/srv/bakkucca/kafka:/var/lib/kafka/data"], "logging": logging,
+            "healthcheck": {"test": ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list"], "interval": "30s", "timeout": "15s", "retries": 10, "start_period": "60s"}}
+
     }}
     path = Path("/opt/bakkucca-data/compose.json")
     path.write_text(json.dumps(compose))
@@ -193,7 +225,7 @@ resource "aws_instance" "data" {
     Requires=docker.service
     After=docker.service network-online.target
     Wants=network-online.target
-    RequiresMountsFor=/srv/bakkucca/mysql /srv/bakkucca/valkey
+    RequiresMountsFor=/srv/bakkucca/mysql /srv/bakkucca/valkey /srv/bakkucca/kafka
     [Service]
     Type=oneshot
     RemainAfterExit=yes
@@ -229,9 +261,9 @@ resource "aws_instance" "data" {
   ]
 }
 
-# MySQL과 Valkey 데이터를 인스턴스 루트 디스크와 분리
+# MySQL과 Valkey 및 Kafka 데이터를 인스턴스 루트 디스크와 분리
 resource "aws_ebs_volume" "data" {
-  for_each          = toset(["mysql", "valkey"])
+  for_each          = toset(["mysql", "valkey", "kafka"])
   availability_zone = "ap-northeast-2a"
   type              = "gp3"
   size              = 10
@@ -239,7 +271,7 @@ resource "aws_ebs_volume" "data" {
   tags              = { Name = "bakkucca-v2-dev-${each.key}" }
 }
 resource "aws_volume_attachment" "data" {
-  for_each    = { mysql = "/dev/sdf", valkey = "/dev/sdg" }
+  for_each    = { mysql = "/dev/sdf", valkey = "/dev/sdg", kafka = "/dev/sdh" }
   device_name = each.value
   volume_id   = aws_ebs_volume.data[each.key].id
   instance_id = aws_instance.data.id
@@ -252,6 +284,7 @@ output "data" {
     private_ip  = aws_instance.data.private_ip
     mysql_port  = 3306
     valkey_port = 6379
+    kafka_port  = 9092
     volume_ids  = { for name, volume in aws_ebs_volume.data : name => volume.id }
   }
 }

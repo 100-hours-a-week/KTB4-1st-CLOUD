@@ -36,7 +36,7 @@ locals {
     "be/AI_ITEM_PRICE_URL"       = "http://${aws_lb.ai.dns_name}/value/estimate-price"
     "be/AI_SMART_SEARCH_URL"     = "http://${aws_lb.ai.dns_name}/api/search/rank-candidates"
     "fe/BACKEND_API_BASE_URL"    = "https://${local.alb_origin_name}/api"
-    "be/KAFKA_BOOTSTRAP_SERVERS" = "${aws_instance.kafka.private_ip}:9092"
+    "be/KAFKA_BOOTSTRAP_SERVERS" = var.environment == "dev" ? var.managed_parameters["be/KAFKA_BOOTSTRAP_SERVERS"] : "${aws_instance.kafka[0].private_ip}:9092"
     "be/CLOUDFRONT_BASE_URL"     = "https://${local.domain_name}"
     "be/CLOUDFRONT_KEY_PAIR_ID"  = aws_cloudfront_public_key.images.id
     }, { for key, value in var.redis_parameters : "be/${key}" => value },

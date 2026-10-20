@@ -11,23 +11,24 @@
 
 ```
 KTB4-1st-CLOUD/
+├── .github/workflows/       # 릴리즈와 배포 워크플로
 ├── infra/
-│   └── v1/
-│       ├── main.tf
-│       ├── variables.tf
-│       ├── network.tf
-│       ├── iam.tf
-│       ├── s3.tf
-│       ├── compute.tf
-│       ├── dns.tf
-│       ├── outputs.tf
-│       └── terraform.tfvars.example
-├── docker-compose.yml
-├── nginx
+│   ├── iam/                 # tobby·janna 계정과 공통 운영 권한
+│   ├── v1/                  # v1 인프라
+│   └── v2/
+│       ├── environments/    # prod와 staging 및 dev 실행 폴더
+│       └── modules/         # 공통 플랫폼과 RDS 및 Serverless Valkey
+├── releases/                # 서비스별 배포 버전 조합
+├── scripts/                 # 배포와 롤백
+├── loadtest/                # 부하 테스트
+├── docker-compose.yml       # v1 운영 컨테이너
+├── docker-compose.local.yml # 로컬 개발 컨테이너
+├── nginx/                   # v1 프록시 설정
 └── README.md
 ```
 
 - `infra/` : IaC(Terraform) 코드. 단계별 설계·구성 이유는 위키의 [v1 IaC 도입 및 구성](https://github.com/100-hours-a-week/KTB4-1st-CLOUD/wiki/Cloud-Dev-1st-IaC) 문서를 따른다
+- 인프라 담당자 계정과 권한은 [infra/iam](infra/iam/README.md), v2 인프라는 [infra/v2](infra/v2/README.md)에서 관리한다.
 - `docker-compose.yml` : v1 EC2 위에서 띄울 컨테이너 정의. 비밀값은 `.env`(커밋 안 함)로 주입
 
 `releases/`는 배포 버전 조합, `.github/workflows/`는 릴리즈와 배포 워크플로, `nginx/`는 프록시 설정, `scripts/`는 배포와 롤백 스크립트를 관리한다.

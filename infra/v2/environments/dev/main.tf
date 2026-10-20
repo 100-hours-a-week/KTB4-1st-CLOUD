@@ -74,7 +74,8 @@ module "platform" {
     ai = { desired = 1, min = 1, max = 2 }
   }
   managed_parameters = {
-    "be/DB_URL" = "jdbc:mysql://${aws_instance.data.private_ip}:3306/${nonsensitive(data.aws_ssm_parameter.mysql_database.value)}?useSSL=false&allowPublicKeyRetrieval=true"
+    "be/KAFKA_BOOTSTRAP_SERVERS" = "${aws_instance.data.private_ip}:9092"
+    "be/DB_URL"                  = "jdbc:mysql://${aws_instance.data.private_ip}:3306/${nonsensitive(data.aws_ssm_parameter.mysql_database.value)}?useSSL=false&allowPublicKeyRetrieval=true"
   }
   redis_parameters = {
     SPRING_DATA_REDIS_HOST        = aws_instance.data.private_ip

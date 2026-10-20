@@ -43,11 +43,11 @@ output "kafka_security_group_id" {
 
 # Kafka EC2 접속 정보 출력
 output "kafka" {
-  description = "Standalone Kafka EC2 connection details"
-  value = {
-    instance_id = aws_instance.kafka.id
-    public_ip   = aws_instance.kafka.public_ip
-    private_ip  = aws_instance.kafka.private_ip
+  description = "Standalone Kafka EC2 connection details, null in dev"
+  value = var.environment == "dev" ? null : {
+    instance_id = aws_instance.kafka[0].id
+    public_ip   = aws_instance.kafka[0].public_ip
+    private_ip  = aws_instance.kafka[0].private_ip
     ssh_user    = "ec2-user"
   }
 }
