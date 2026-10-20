@@ -1,7 +1,10 @@
 # 서비스별 Parameter Store에 저장할 실행 설정과 비밀값 이름
 locals {
   runtime_secure_parameter_keys = {
-    be = ["DB_PASSWORD", "JWT_SECRET", "KAKAO_CLIENT_SECRET", "PROMETHEUS_AUTH_PASSWORD", "CLOUDFRONT_PRIVATE_KEY_PEM", "SPRING_DATA_REDIS_PASSWORD"]
+    be = concat(
+      var.database_secret_arn == null ? ["DB_PASSWORD"] : [],
+      ["JWT_SECRET", "KAKAO_CLIENT_SECRET", "PROMETHEUS_AUTH_PASSWORD", "CLOUDFRONT_PRIVATE_KEY_PEM", "SPRING_DATA_REDIS_PASSWORD"],
+    )
     fe = ["KAKAO_REST_API_KEY", "DISCORD_WEBHOOK_URL"]
     ai = ["ANTHROPIC_API_KEY"]
   }

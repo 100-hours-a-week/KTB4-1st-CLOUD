@@ -262,7 +262,7 @@ sudo docker compose \
 
 1. prod와 staging은 서로 다른 VPC와 state에 RDS를 생성한다. dev의 MySQL EC2는 유지한다.
 2. 각 환경의 `modules/platform`이 private subnet 두 개를 생성하고 `modules/rds`에 ID를 전달한다. subnet ID를 수동 입력하지 않는다.
-3. prod는 기존 피어링을 재사용하고 state 주소 변경은 `moved`로 연결한다. 이미 있는 RDS private CIDR 출발 경로는 import한다. `v1_ec2_subnet_id`에 실제 운영 EC2의 subnet ID를 입력한다. staging은 시험용 `v1_network`가 있을 때만 마이그레이션 네트워크를 생성한다.
+3. prod는 기존 피어링을 재사용하고 state 주소 변경은 `moved`로 연결한다. 이미 있는 RDS private CIDR 출발 경로는 import한다. 기존 운영 EC2 subnet ID는 prod `migration.tf`의 local에 고정돼 있다. staging은 시험용 `v1_network`가 있을 때만 마이그레이션 네트워크를 생성한다.
 4. v1 EC2 subnet route table에 각 RDS private subnet CIDR을 대상으로 하는 피어링 경로를 추가하고, RDS private route table에는 v1 CIDR 반환 경로를 추가한다.
 5. RDS SG는 같은 환경의 BE SG와 피어링 상대 v1 SG에서 TCP 3306을 허용한다. v2 BE의 3306 아웃바운드와 RDS→v1 복제 연결 아웃바운드도 구성한다.
 6. 운영 v1 SG 인바운드는 `infra/v1/network.tf`의 개별 rule로 관리한다. 기존 HTTP·HTTPS·SSH rule은 import하고, 기존 v1 RDS와 전용 복제 rule은 제거하며 v2 RDS private CIDR의 TCP 3306 rule을 추가한다. staging 시험용 v1 SG도 inline과 개별 rule을 혼용하지 않도록 소유 설정을 정리한다.
@@ -271,8 +271,6 @@ sudo docker compose \
 ```bash
 # prod 예시. staging은 environments/staging과 해당 tfvars를 사용
 cd /path/to/KTB4-1st-CLOUD/infra/v2/environments/prod
-cp terraform.tfvars.example terraform.tfvars
-# v1_ec2_subnet_id를 실제 값으로 입력
 terraform init
 terraform validate
 terraform plan
@@ -283,9 +281,8 @@ RDS와 subnet, 피어링 및 마이그레이션 경로는 해당 v2 환경의 st
 운영 v1 SG의 인바운드는 `infra/v1` state가 관리하므로 v1 네트워크 변경도 별도로 검토한다.
 v1 전체 plan은 기존 `bakkucca-v1-mysql`과 전용 parameter/subnet group, SG 및 복제 rule을 삭제한다. 이는 사용자 승인된 제거 범위이며 실제 EC2 subnet 삭제는 포함하지 않는다. 최종 snapshot 이름 `bakkucca-v1-mysql-final`과 그 외 변경 범위를 확인한 뒤 별도로 적용한다.
 환경별 출력 `rds_mysql_endpoint`, `rds_mysql_port`, `rds_mysql_master_secret_arn`을 사용한다.
-이 Terraform 변경은 실행 중인 BE의 DB를 전환하지 않는다. 애플리케이션 DB 계정과 환경별
-SSM `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`를 준비하고 migration 프로파일 및 barrier API를
-검증한 뒤 후속 절차를 진행한다. RDS master 계정은 애플리케이션 계정과 별도로 관리한다.
+이 Terraform 변경은 실행 중인 v1 BE의 DB를 전환하지 않는다. 환경별
+SSM `DB_URL`과 `DB_USERNAME`은 Terraform이 자동 등록한다. BE의 `DB_PASSWORD`는 RDS master secret의 `password` JSON key를 ECS에서 직접 주입한다. 별도 DB 계정은 생성하지 않는다. 기존 v1 Compose의 migration 프로파일 설정과 barrier API는 별도로 준비하고 검증한 뒤 후속 절차를 진행한다.
 
 ### VPC peering을 통한 RDS에서 EC2 MySQL로 연결
 

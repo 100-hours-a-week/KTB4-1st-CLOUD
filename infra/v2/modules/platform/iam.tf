@@ -81,7 +81,7 @@ resource "aws_iam_role_policy" "execution_parameters" {
   })
 }
 
-# ECS 에이전트에 공통 GHCR 인증정보 조회만 허용
+# ECS 에이전트에 GHCR 인증정보와 해당 환경의 RDS 비밀번호 조회 허용
 resource "aws_iam_role_policy" "execution_registry" {
   for_each = local.services
   name     = "ghcr-pull"
@@ -89,9 +89,12 @@ resource "aws_iam_role_policy" "execution_registry" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = data.aws_secretsmanager_secret.ghcr.arn
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue"]
+      Resource = concat(
+        [data.aws_secretsmanager_secret.ghcr.arn],
+        each.key == "be" && var.database_secret_arn != null ? [var.database_secret_arn] : [],
+      )
     }]
   })
 }

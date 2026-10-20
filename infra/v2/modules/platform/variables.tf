@@ -58,3 +58,10 @@ variable "managed_parameters" {
   type    = map(string)
   default = {}
 }
+
+# RDS 환경만 DB_PASSWORD를 Secrets Manager에서 직접 주입
+variable "database_secret_arn" {
+  description = "RDS-managed master secret ARN; null keeps the existing SSM password reference"
+  type        = string
+  default     = null
+}

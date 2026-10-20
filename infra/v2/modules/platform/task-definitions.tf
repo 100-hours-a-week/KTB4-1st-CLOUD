@@ -33,7 +33,13 @@ locals {
       execution_role_arn  = aws_iam_role.execution[name].arn
       registry_secret_arn = data.aws_secretsmanager_secret.ghcr.arn
       log_group           = aws_cloudwatch_log_group.app[name].name
-      runtime_references  = [for key, arn in local.runtime_parameter_arns[name] : { name = key, valueFrom = arn }]
+      runtime_references = concat(
+        [for key, arn in local.runtime_parameter_arns[name] : { name = key, valueFrom = arn }],
+        name == "be" && var.database_secret_arn != null ? [{
+          name      = "DB_PASSWORD"
+          valueFrom = "${var.database_secret_arn}:password::"
+        }] : [],
+      )
     })
   }
 }

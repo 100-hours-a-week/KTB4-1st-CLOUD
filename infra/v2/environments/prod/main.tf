@@ -84,6 +84,12 @@ module "platform" {
   initial_image_digests        = local.initial_images
   existing_uploads_bucket_name = "bakkucca-uploads"
   redis_parameters             = module.valkey.redis_parameters
+  # ARN은 비밀번호 값이 아니므로 태스크 정의에 참조만 전달
+  database_secret_arn = nonsensitive(module.rds.master_secret_arn)
+  managed_parameters = {
+    "be/DB_URL"      = module.rds.jdbc_url
+    "be/DB_USERNAME" = var.rds_master_username
+  }
 }
 
 # 운영과 스테이징에 동일한 Serverless Valkey 사양 적용
