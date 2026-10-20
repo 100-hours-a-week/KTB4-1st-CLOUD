@@ -159,3 +159,13 @@ output "redis_password_parameter_arn" {
 output "uploads_bucket" {
   value = data.aws_s3_bucket.uploads.bucket
 }
+
+output "private_subnet_ids" {
+  value = { for az, subnet in aws_subnet.private : az => subnet.id }
+}
+output "private_subnet_cidrs" {
+  value = { for az, subnet in aws_subnet.private : az => subnet.cidr_block }
+}
+output "private_route_table_id" {
+  value = try(aws_route_table.private[0].id, null)
+}

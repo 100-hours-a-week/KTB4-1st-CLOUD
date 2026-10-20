@@ -83,6 +83,10 @@ module "platform" {
     ap-northeast-2a = "10.30.0.0/24"
     ap-northeast-2c = "10.30.1.0/24"
   }
+  private_subnets = {
+    ap-northeast-2a = "10.30.10.0/24"
+    ap-northeast-2c = "10.30.11.0/24"
+  }
   initial_image_digests = local.initial_images
   redis_parameters      = module.valkey.redis_parameters
 }

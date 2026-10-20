@@ -59,3 +59,12 @@ output "valkey" {
 output "github_deploy_role_arns" {
   value = { for service, role in aws_iam_role.github_deploy : service => role.arn }
 }
+
+output "private_subnet_ids" { value = module.platform.private_subnet_ids }
+output "rds_mysql_endpoint" { value = module.rds.endpoint }
+output "rds_mysql_port" { value = module.rds.port }
+output "rds_mysql_security_group_id" { value = module.rds.security_group_id }
+output "rds_mysql_master_secret_arn" {
+  value     = module.rds.master_secret_arn
+  sensitive = true
+}
