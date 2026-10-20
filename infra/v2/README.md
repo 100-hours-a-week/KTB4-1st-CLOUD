@@ -35,7 +35,19 @@ terraform output kafka
 
 prod의 v1 EC2 subnet ID는 `migration.tf`의 local에 `subnet-02514cb3bc238b48d`로 고정한다. 별도 입력은 필요 없다. 기존 피어링을 재사용하며 private subnet 왕복 경로를 추가한다. v1 MySQL 복제 프록시의 3306 인바운드는 `infra/v1/network.tf`의 개별 SG rule 리소스로 관리한다. 기존 HTTP·HTTPS·SSH 규칙은 기존 rule ID로 import한다. 기존 v1 RDS 전용 복제 규칙은 RDS와 함께 제거한다. v1 전체 적용 전 반드시 plan을 검토한다.
 
-staging은 기존 `v1_network`를 지정한 경우에만 시험용 v1과 RDS 사이의 경로와 SG 규칙을 생성한다. 시험용 v1 SG를 inline 규칙으로 관리한다면 개별 SG rule과 혼용하지 않도록 소유 설정부터 정리한다.
+기본 plan에는 `terraform.tfvars`가 필요 없다. 이미지 digest를 별도로 지정하거나 캐시 비밀번호 버전을 변경할 때만 해당 환경의 `terraform.tfvars`에 `initial_image_digests`, `password_version`을 설정한다.
+
+staging은 기존 `v1_network`를 지정한 경우에만 시험용 v1과 RDS 사이의 경로와 SG 규칙을 생성한다. 시험용 v1 연결이 필요할 때 staging의 `terraform.tfvars`에 아래 항목만 작성한다.
+
+```hcl
+v1_network = {
+  vpc_id            = "vpc-..."
+  cidr_block        = "10.50.0.0/16"
+  route_table_id    = "rtb-..."
+  security_group_id = "sg-..."
+}
+```
+ 시험용 v1 SG를 inline 규칙으로 관리한다면 개별 SG rule과 혼용하지 않도록 소유 설정부터 정리한다.
 
 각 환경의 `rds_mysql_endpoint`, `rds_mysql_port`, `rds_mysql_master_secret_arn` 출력으로 접속 정보를 확인한다. 기존 실행 중인 서비스의 DB를 자동 전환하지 않는다. `DB_URL`은 생성된 RDS endpoint와 DB 이름으로 계산하고 `DB_USERNAME`은 RDS master 사용자 이름으로 기존 BE SSM 경로에 자동 등록한다. BE는 기존 RDS master 계정을 사용한다. `DB_PASSWORD`는 SSM에 복사하지 않고 RDS가 관리하는 Secrets Manager의 `password` JSON key를 ECS 기동 시 직접 주입한다. Terraform은 RDS 비밀번호 값을 읽거나 state에 저장하지 않는다. BE 실행 역할에 해당 환경 RDS secret 조회 권한만 추가하며 dev는 기존 SSM 비밀번호 경로를 유지한다. 비밀번호 회전 후 실행 중인 컨테이너에는 자동 갱신되지 않으므로 새 태스크 배포가 필요하다.
 

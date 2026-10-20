@@ -271,7 +271,6 @@ sudo docker compose \
 ```bash
 # prod 예시. staging은 environments/staging과 해당 tfvars를 사용
 cd /path/to/KTB4-1st-CLOUD/infra/v2/environments/prod
-cp terraform.tfvars.example terraform.tfvars
 terraform init
 terraform validate
 terraform plan
