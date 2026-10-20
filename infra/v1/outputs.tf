@@ -43,15 +43,35 @@ output "container_log_group" {
 
 output "sqs_alert_queue_url" {
   description = "애플리케이션 및 알람 전송용 SQS queue URL"
-  value = aws_sqs_queue.alert_queue.url
+  value       = aws_sqs_queue.alert_queue.url
 }
 
 output "sqs_alert_queue_arn" {
   description = "SNS 구독 및 권한 정책 연결용 SQS queue ARN"
-  value = aws_sqs_queue.alert_queue.arn
+  value       = aws_sqs_queue.alert_queue.arn
 }
 
 output "lambda_alert_arn" {
   description = "디스코드 알림용 Lambda 함수 ARN"
-  value = aws_lambda_function.alert_notifier.arn
+  value       = aws_lambda_function.alert_notifier.arn
+}
+
+output "rds_mysql_endpoint" {
+  description = "RDS MySQL endpoint for migration and application configuration"
+  value       = aws_db_instance.mysql.address
+}
+
+output "rds_mysql_port" {
+  description = "RDS MySQL port"
+  value       = aws_db_instance.mysql.port
+}
+
+output "rds_mysql_security_group_id" {
+  description = "Security group attached to RDS MySQL"
+  value       = aws_security_group.rds_mysql.id
+}
+
+output "rds_mysql_master_secret_arn" {
+  description = "Secrets Manager ARN containing the managed RDS master password"
+  value       = aws_db_instance.mysql.master_user_secret[0].secret_arn
 }
