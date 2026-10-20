@@ -15,31 +15,7 @@ resource "aws_security_group" "v1" {
   description = "bakkucca v1 security group"
   vpc_id      = data.aws_vpc.default.id
 
-  ingress {
-    description = "HTTP - redirected to HTTPS by Nginx"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # GitHub Actions 러너(CD)가 SSH로 배포한다. 러너 IP는 고정되지 않아 전체 허용하고, 인증은 키로만 한다.
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
+  # 인바운드는 아래 개별 리소스로 관리해 기존 복제 규칙과의 혼용 방지
   egress {
     # 기존 전체 아웃바운드로 v2 Kafka와 Valkey 요청도 허용
     from_port   = 0
@@ -49,7 +25,70 @@ resource "aws_security_group" "v1" {
   }
 }
 
-# 기존 Kafka 피어링을 조회하고 연결 자체는 v2 prod에서 관리
+# 기존 인바운드를 동일한 AWS rule ID로 인계
+locals {
+  v1_service_ingress = {
+    http = {
+      port        = 80
+      description = "HTTP - redirected to HTTPS by Nginx"
+      rule_id     = "sgr-01b505e0bb22053fe"
+    }
+    https = {
+      port        = 443
+      description = "HTTPS"
+      rule_id     = "sgr-0bc952db6ee15092e"
+    }
+    ssh = {
+      port        = 22
+      description = "SSH"
+      rule_id     = "sgr-0e2b7badbda9efe16"
+    }
+  }
+}
+
+import {
+  for_each = local.v1_service_ingress
+  to       = aws_vpc_security_group_ingress_rule.service[each.key]
+  id       = each.value.rule_id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "service" {
+  for_each          = local.v1_service_ingress
+  security_group_id = aws_security_group.v1.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = each.value.port
+  to_port           = each.value.port
+  description       = each.value.description
+}
+
+# v1 state가 관리 중인 기존 v1 RDS의 복제 접근 규칙 보존
+# 기존 RDS 자체는 이번 v2 RDS 통합의 관리 대상이 아님
+data "aws_security_group" "legacy_rds_mysql" {
+  id = "sg-0d4ad6a999d126b29"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ec2_from_rds_mysql" {
+  security_group_id            = aws_security_group.v1.id
+  referenced_security_group_id = data.aws_security_group.legacy_rds_mysql.id
+  ip_protocol                  = "tcp"
+  from_port                    = 3306
+  to_port                      = 3306
+  description                  = "RDS MySQL replication access to the EC2 MySQL proxy"
+}
+
+# v2 prod RDS 복제 연결을 v1 MySQL socat 포트로 허용
+resource "aws_vpc_security_group_ingress_rule" "ec2_from_v2_rds" {
+  for_each          = toset(["10.20.10.0/24", "10.20.11.0/24"])
+  security_group_id = aws_security_group.v1.id
+  cidr_ipv4         = each.value
+  ip_protocol       = "tcp"
+  from_port         = 3306
+  to_port           = 3306
+  description       = "MySQL replication from prod RDS private subnets"
+}
+
+# 기존 v1↔v2 공통 피어링을 조회하고 연결 자체는 v2 prod에서 관리
 data "aws_vpc_peering_connection" "v2_prod" {
   id = "pcx-0e3a2559c700bb14f"
 }

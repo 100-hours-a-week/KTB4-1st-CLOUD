@@ -10,6 +10,16 @@ variable "data_volume_size_gb" {
   default     = 30
 }
 
+variable "ec2_subnet_id" {
+  description = "Existing subnet for the long-lived v1 EC2 instance; changing it replaces the instance"
+  type        = string
+}
+
+variable "ec2_ami_id" {
+  description = "Pinned AL2023 ARM64 AMI for the existing v1 EC2 instance"
+  type        = string
+}
+
 variable "ssh_key_path" {
   description = "EC2 접속용 공개키 로컬 경로"
   type        = string

@@ -19,9 +19,9 @@ resource "aws_key_pair" "v1" {
 }
 
 resource "aws_instance" "v1" {
-  ami                    = data.aws_ami.al2023_arm64.id
+  ami                    = var.ec2_ami_id
   instance_type          = "t4g.small"
-  subnet_id              = data.aws_subnets.default.ids[0]
+  subnet_id              = var.ec2_subnet_id
   vpc_security_group_ids = [aws_security_group.v1.id]
   key_name               = aws_key_pair.v1.key_name
   iam_instance_profile   = aws_iam_instance_profile.instance.name

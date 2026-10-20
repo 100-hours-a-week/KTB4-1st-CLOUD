@@ -77,6 +77,10 @@ module "platform" {
     ap-northeast-2a = "10.20.0.0/24"
     ap-northeast-2c = "10.20.1.0/24"
   }
+  private_subnets = {
+    ap-northeast-2a = "10.20.10.0/24"
+    ap-northeast-2c = "10.20.11.0/24"
+  }
   initial_image_digests        = local.initial_images
   existing_uploads_bucket_name = "bakkucca-uploads"
   redis_parameters             = module.valkey.redis_parameters

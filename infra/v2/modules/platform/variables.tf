@@ -19,6 +19,10 @@ variable "vpc_cidr" {
 variable "public_subnets" {
   type = map(string)
 }
+variable "private_subnets" {
+  type    = map(string)
+  default = {}
+}
 
 # 운영과 스테이징의 공통 용량을 기본값으로 사용
 variable "service_capacity" {
