@@ -17,14 +17,14 @@
 | 대상 | 허용 범위 |
 |---|---|
 | 기존 EC2, S3, CloudFront, CloudWatch, Logs, SNS | 기존 운영 권한 유지. v1 컨테이너 로그 그룹 삭제·보관 기간 변경 금지 |
-| ECS, Auto Scaling, ALB, CodeDeploy, ElastiCache | 서울 리전 운영 권한. 이 서비스들은 리소스 이름별로 제한하지 않음 |
+| ECS, Auto Scaling, ALB, CodeDeploy, ElastiCache, RDS | 서울 리전 운영 권한. 이 서비스들은 리소스 이름별로 제한하지 않음 |
 | ACM | 서울과 버지니아 인증서 관리 |
 | Route 53 | DNS 조회와 `bakkucca.com` Hosted Zone 레코드 변경 |
 | SSM Parameter Store | `/bakkucca-v2-*/*` 설정과 비밀값 관리 |
 | SSM 접속과 명령 실행 | `Project=bakkucca`, `InfraVersion=v2` 태그가 모두 있는 서울 EC2. 세션 재연결·종료는 본인 세션만 허용 |
 | Secrets Manager | `bakkucca-v2-*`와 공통 `bakkucca/ghcr` 관리 |
 | IAM | 역할 조회와 v2 EC2·ECS 태스크·CodeDeploy 역할 전달. 역할 종류에 맞는 AWS 서비스로만 전달 가능 |
-| 서비스 연결 역할 | ECS, Auto Scaling, ALB, ElastiCache의 최초 서비스 연결 역할 생성 |
+| 서비스 연결 역할 | ECS, Auto Scaling, ALB, ElastiCache, RDS의 최초 서비스 연결 역할 생성 |
 
 - MFA 인증이 없는 API 요청은 기존 정책대로 차단한다. CLI에서는 MFA로 발급한 STS 임시 자격 증명을 사용한다.
 - IAM 사용자·역할·정책의 생성 및 권한 변경은 기존처럼 차단한다. 해당 리소스를 생성·변경하는 전체 v2 Terraform apply는 `bootstrap-admin`으로 실행한다.
