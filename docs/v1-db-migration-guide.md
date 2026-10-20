@@ -229,6 +229,29 @@ cd /home/ubuntu/bakkucca
 `mysql-rds-migration-common.sh`는 다른 스크립트가 자동으로 읽으므로 직접 실행하지 않는다.
 Docker socket 권한 때문에 명령은 root 권한으로 실행하지만, 환경변수는 `sudo env`로 명시적으로 전달한다.
 
+마이그레이션 프로파일은 기본 Compose에 넣지 않는다. 다음 override 파일을 기본 파일과
+함께 사용한다.
+
+```text
+/home/ubuntu/bakkucca/docker-compose.yml
+/home/ubuntu/bakkucca/docker-compose.migration.yml
+```
+
+```bash
+# [EC2 ubuntu] RDS 접속 변수가 준비된 상태에서 migration 프로파일로 WAS를 배포
+docker compose \
+  -f /home/ubuntu/bakkucca/docker-compose.yml \
+  -f /home/ubuntu/bakkucca/docker-compose.migration.yml \
+  config --quiet
+sudo docker compose \
+  -f /home/ubuntu/bakkucca/docker-compose.yml \
+  -f /home/ubuntu/bakkucca/docker-compose.migration.yml \
+  up -d springboot
+```
+
+일반 운영 배포는 기존처럼 `docker-compose.yml`만 사용한다. migration override를 함께
+지정하지 않으면 Spring Boot는 migration 프로파일과 RDS DataSource를 사용하지 않는다.
+
 ### 인프라 사전 준비
 
 > 이 절차는 EC2에서 `sudo`, Docker socket, systemd를 사용할 수 있고 `mysql`/`mysqladmin` client가 설치되어 있다는 전제다.<br>
