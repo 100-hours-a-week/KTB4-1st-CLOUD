@@ -26,5 +26,7 @@ terraform.rc
 
 # Load tests
 loadtest/**/target/certs/
+loadtest/migration/certs/
+loadtest/migration/results/
 loadtest/**/runner/results/
 loadtest/**/attack/nginx/jwt.secret
