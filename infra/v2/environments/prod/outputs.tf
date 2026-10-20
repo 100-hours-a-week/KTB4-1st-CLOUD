@@ -49,8 +49,7 @@ output "uploads_bucket" {
 output "valkey" {
   value = merge(module.valkey.valkey, {
     parameter_names = {
-      for key, name in module.platform.services.be.runtime_parameter_names : key => name
-      if startswith(key, "SPRING_DATA_REDIS_")
+      for key in keys(module.valkey.redis_parameters) : key => "/bakkucca-v2-prod/be/${key}"
     }
   })
 }

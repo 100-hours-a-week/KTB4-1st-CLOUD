@@ -43,16 +43,10 @@ provider "aws" {
   }
 }
 
-# 최초 이미지와 캐시 비밀번호 버전 입력
+# Valkey 선적용에는 이미지 입력 없이 진행
 variable "initial_image_digests" {
   type    = map(string)
   default = {}
-  validation {
-    condition = length(var.initial_image_digests) > 0 || try(
-      yamldecode(file("${path.module}/../../../../releases/v1.5.1.yaml")).release_metadata.bundle_version == "v1.5.1", false
-    )
-    error_message = "releases/v1.5.1.yaml을 준비하거나 서비스별 initial_image_digests를 입력해야 함"
-  }
 }
 variable "password_version" {
   type    = number
@@ -61,7 +55,7 @@ variable "password_version" {
 
 # release bundle의 서비스별 digest를 최초 이미지로 사용
 locals {
-  initial_bundle = try(yamldecode(file("${path.module}/../../../../releases/v1.5.1.yaml")), null)
+  initial_bundle = try(yamldecode(file("${path.module}/../../../../releases/v1.6.1.yaml")), null)
   initial_images = length(var.initial_image_digests) > 0 ? var.initial_image_digests : try({
     be = "${local.initial_bundle.services.backend.image_uri}@${local.initial_bundle.services.backend.image_digest}"
     fe = "${local.initial_bundle.services.frontend.image_uri}@${local.initial_bundle.services.frontend.image_digest}"
@@ -94,7 +88,7 @@ module "valkey" {
   environment               = "prod"
   vpc_id                    = module.platform.vpc_id
   subnet_ids                = module.platform.public_subnet_ids
-  backend_security_group_id = module.platform.security_group_ids.be
+  backend_security_group_id = module.platform.backend_security_group_id
   password_parameter_arn    = module.platform.redis_password_parameter_arn
   password_version          = var.password_version
 }

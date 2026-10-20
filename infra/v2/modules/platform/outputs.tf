@@ -31,6 +31,16 @@ output "security_group_ids" {
   )
 }
 
+# Valkey만 적용할 때 BE 보안그룹을 직접 참조
+output "backend_security_group_id" {
+  value = aws_security_group.app["be"].id
+}
+
+# v1 접근 규칙에서 기존 Kafka 보안그룹을 직접 참조
+output "kafka_security_group_id" {
+  value = aws_security_group.kafka.id
+}
+
 # Kafka EC2 접속 정보 출력
 output "kafka" {
   description = "Standalone Kafka EC2 connection details"

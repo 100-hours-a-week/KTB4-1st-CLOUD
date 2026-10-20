@@ -58,12 +58,14 @@ resource "aws_elasticache_user_group" "valkey_be" {
 
 # 최소 용량 예약 없이 사용량에 따라 과금되는 공유 캐시 생성
 resource "aws_elasticache_serverless_cache" "valkey" {
-  name                     = local.valkey_name
-  engine                   = "valkey"
-  major_engine_version     = "8"
-  subnet_ids               = values(var.subnet_ids)
-  security_group_ids       = [aws_security_group.valkey.id]
-  user_group_id            = aws_elasticache_user_group.valkey_be.user_group_id
+  name   = local.valkey_name
+  engine = "valkey"
+  # Redis OSS 7.2 호환 버전 사용
+  major_engine_version = "8"
+  subnet_ids           = values(var.subnet_ids)
+  security_group_ids   = [aws_security_group.valkey.id]
+  user_group_id        = aws_elasticache_user_group.valkey_be.user_group_id
+  # 한국 시간 매일 오전 3시 스냅샷 생성 후 1일 보관
   snapshot_retention_limit = 1
   daily_snapshot_time      = "18:00"
 
