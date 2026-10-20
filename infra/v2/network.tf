@@ -5,6 +5,11 @@ locals {
     ap-northeast-2a = "10.20.0.0/24"
     ap-northeast-2c = "10.20.1.0/24"
   }
+
+  private_subnets = {
+    ap-northeast-2a = "10.20.10.0/24"
+    ap-northeast-2c = "10.20.11.0/24"
+  }
 }
 
 resource "aws_vpc" "prod" {
@@ -40,6 +45,20 @@ resource "aws_subnet" "public" {
   }
 }
 
+resource "aws_subnet" "private" {
+  for_each = local.private_subnets
+
+  vpc_id                  = aws_vpc.prod.id
+  availability_zone       = each.key
+  cidr_block              = each.value
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${local.name_prefix}-private-${each.key}"
+    Tier = "private"
+  }
+}
+
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.prod.id
 
@@ -59,4 +78,19 @@ resource "aws_route_table_association" "public" {
 
   subnet_id      = each.value.id
   route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.prod.id
+
+  tags = {
+    Name = "${local.name_prefix}-private-rt"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  for_each = aws_subnet.private
+
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private.id
 }

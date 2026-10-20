@@ -10,17 +10,6 @@ data "aws_subnets" "default" {
   }
 }
 
-data "aws_subnet" "ec2" {
-  id = var.ec2_subnet_id
-
-  lifecycle {
-    postcondition {
-      condition     = self.vpc_id == data.aws_vpc.default.id
-      error_message = "ec2_subnet_id must belong to the default VPC."
-    }
-  }
-}
-
 resource "aws_security_group" "v1" {
   name        = "bakkucca-v1-sg"
   description = "bakkucca v1 security group"

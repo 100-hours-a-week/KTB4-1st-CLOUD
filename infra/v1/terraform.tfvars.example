@@ -3,12 +3,3 @@
 ssh_key_path = "~/.ssh/bakkucca_v1.pub"
 ec2_subnet_id = "subnet-REPLACE_WITH_EXISTING_EC2_SUBNET_ID"
 ec2_ami_id    = "ami-REPLACE_WITH_CURRENT_EC2_AMI_ID"
-
-# RDS MySQL 8.4 migration target. The master password is managed by AWS Secrets Manager.
-rds_database_name       = "market"
-rds_master_username     = "admin"
-rds_instance_class      = "db.t4g.small"
-rds_allocated_storage_gb = 100
-rds_max_allocated_storage_gb = 500
-rds_backup_retention_days = 7
-rds_deletion_protection = true

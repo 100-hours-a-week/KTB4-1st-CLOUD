@@ -34,7 +34,6 @@ cat >"$MYSQL_CNF" <<EOF
 [client]
 user=${RDS_USER}
 password=${RDS_PASSWORD}
-password=${RDS_PASSWORD}
 host=${RDS_HOST}
 port=${RDS_PORT}
 connect-timeout=5

@@ -1,3 +1,18 @@
+# t4g small EC2
+data "aws_ami" "al2023_arm64" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-arm64"]
+  }
+  filter {
+    name   = "architecture"
+    values = ["arm64"]
+  }
+}
+
 resource "aws_key_pair" "v1" {
   key_name   = "bakkucca-v1"
   public_key = file(pathexpand(var.ssh_key_path))
@@ -12,8 +27,8 @@ resource "aws_instance" "v1" {
   iam_instance_profile   = aws_iam_instance_profile.instance.name
 
   root_block_device {
-    volume_type           = "gp3"
-    volume_size           = var.data_volume_size_gb
+    volume_type = "gp3"
+    volume_size = var.data_volume_size_gb
     delete_on_termination = false
   }
 
@@ -21,6 +36,10 @@ resource "aws_instance" "v1" {
     Name = "bakkucca-v1"
   }
 
+  # 새 AMI가 나올 때마다 인스턴스가 교체되지 않도록 AMI 변경은 무시
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "v1" {

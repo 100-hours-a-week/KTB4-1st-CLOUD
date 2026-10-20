@@ -255,28 +255,51 @@ sudo docker compose \
 ### 인프라 사전 준비
 
 > 이 절차는 EC2에서 `sudo`, Docker socket, systemd를 사용할 수 있고 `mysql`/`mysqladmin` client가 설치되어 있다는 전제다.<br>
-  RDS IAM 권한으로 DB 인스턴스와 보안 그룹을 미리 생성하고, 애플리케이션의 barrier API가 배포된 상태여야 한다.<br>
+  RDS는 기존 v1 EC2 VPC가 아니라 **v2 전용 VPC**에 생성한다. 두 VPC는 VPC peering으로
+  연결하며, RDS IAM 권한으로 DB 인스턴스와 보안 그룹을 미리 생성하고 애플리케이션의
+  barrier API가 배포된 상태여야 한다.<br>
   `<...>` 표기는 실행 전에 실제 값으로 치환한다.
 
-1. EC2 VPC ID, 사설 IP 확인
-2. DB 서브넷 그룹 생성(EC2와 동일한 VPC)
-3. 보안 그룹 상호 참조 인바운드 설정
-    - EC2 보안 그룹
-        - 프로토콜: TCP
-        - 포트 범위: 3306
-        - 소스: RDS 보안 그룹
-    - RDS 보안 그룹
-        - 프로토콜: TCP
-        - 포트 범위: 3306
-        - 소스: EC2 보안 그룹
-    - 네트워크 ACL 및 라우팅 테이블이 연결을 차단하지 않는지 확인한다.
-4. RDS
+1. **V1 Terraform은 apply하지 않는다.** 기존 v1 EC2, VPC, route table, security group은
+   마이그레이션 전 상태를 유지한다. 필요한 v1 VPC/EC2 식별자만 조회한다.
+2. **V2 Terraform**에서 v2 VPC의 private subnet 2개와 RDS, VPC peering, 양쪽 route,
+   양쪽 3306 보안 규칙을 생성한다.
+3. 두 VPC의 route table이 다음처럼 구성됐는지 확인한다.
+    - v1 EC2 subnet route table → v2 VPC CIDR → VPC peering connection
+    - v2 RDS private route table → v1 VPC CIDR → VPC peering connection
+4. 보안 그룹은 서로 다른 VPC이므로 SG 상호 참조를 사용하지 않는다.
+    - v1 EC2 보안 그룹: v2 VPC CIDR의 TCP 3306 허용
+    - v2 RDS 보안 그룹: v1 VPC CIDR의 TCP 3306 허용
+    - 인터넷에서 RDS 3306은 허용하지 않는다.
+5. RDS
     - Multi-AZ 배포와 자동 백업 활성화
     - MySQL 엔진 버전 8.4로 고정
 
-### RDS에서 EC2 MySQL로 연결
+Terraform 적용 순서는 다음과 같다.
 
-RDS는 Docker bridge의 컨테이너 IP에 직접 연결하지 않는다.<br>
+```bash
+# [Terraform 실행 환경] 1. v1 값은 조회만 하고, v2 변수에 입력
+cd /path/to/KTB4-1st-CLOUD/infra/v1
+terraform output -raw instance_id
+terraform output -raw security_group_id
+
+# [Terraform 실행 환경] 2. v2 네트워크와 RDS를 한 state에서 생성
+cd /path/to/KTB4-1st-CLOUD/infra/v2
+cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars에 v1 조회값과 v2 private subnet 값을 입력
+terraform apply
+```
+
+RDS, DB subnet group, parameter group, RDS 보안 그룹, VPC peering, 양쪽 route와 v1 EC2
+보안 그룹의 3306 ingress rule은 모두 `infra/v2` state가 소유한다. `infra/v1` state에는
+RDS 관련 리소스를 추가하지 않는다. RDS subnet group에는 `infra/v2`의 private subnet ID만
+사용한다.
+
+### VPC peering을 통한 RDS에서 EC2 MySQL로 연결
+
+RDS는 v2 VPC의 private subnet에 있고 EC2는 v1 VPC에 있으므로, RDS가 EC2의 Docker bridge
+또는 컨테이너 IP에 직접 연결하지 않는다. VPC peering route를 통해 EC2 사설 IP의 3306으로
+접속한다.<br>
 EC2 사설 IP의 3306 포트에 `socat`을 systemd 서비스로 열고, 서비스 시작 때마다 현재 컨테이너 IP를 다시 조회한다.
 
 1. EC2에서 다음 값을 설정한다.
@@ -334,7 +357,8 @@ EC2 사설 IP의 3306 포트에 `socat`을 systemd 서비스로 열고, 서비�
      -u root -p --connect-timeout=5 ping
    sudo ss -ltnp | grep ':3306'
    ```
-   EC2 내부 확인이 실패하면 다음 단계로 진행하지 않는다.    EC2 보안 그룹은 RDS 보안 그룹에서만 3306을 허용한다.<br>
+   EC2 내부 확인이 실패하면 다음 단계로 진행하지 않는다. EC2 보안 그룹은 v2 VPC CIDR에서
+   3306을 허용하고, RDS 보안 그룹은 v1 VPC CIDR에서 3306을 허용한다.<br>
    RDS에는 SSH나 `mysqladmin`을 실행할 셸이 없으므로 RDS에서 EC2로의 실제 연결 검증은 RDS 외부 복제를 설정하고 시작한 뒤 수행한다. <br>
    `mysql.rds_set_external_source`와 `mysql.rds_start_replication`은 RDS에 접속한 `mysql` 클라이언트에서 실행한다.<br>
    RDS가 EC2의 `${EC2_PRIVATE_IP}:3306`에 접근하지 못하면 복제가 시작되지 않거나 `Last_IO_Error`가 기록된다.

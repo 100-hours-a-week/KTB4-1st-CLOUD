@@ -13,6 +13,37 @@ output "public_subnet_cidrs" {
   value       = { for az, subnet in aws_subnet.public : az => subnet.cidr_block }
 }
 
+output "private_subnet_ids" {
+  description = "Private subnet IDs for RDS, keyed by AZ"
+  value       = { for az, subnet in aws_subnet.private : az => subnet.id }
+}
+
+output "private_subnet_cidrs" {
+  description = "Private subnet CIDRs for RDS, keyed by AZ"
+  value       = { for az, subnet in aws_subnet.private : az => subnet.cidr_block }
+}
+
+output "rds_mysql_endpoint" {
+  value = aws_db_instance.mysql.address
+}
+
+output "rds_mysql_port" {
+  value = aws_db_instance.mysql.port
+}
+
+output "rds_mysql_security_group_id" {
+  value = aws_security_group.rds_mysql.id
+}
+
+output "rds_mysql_master_secret_arn" {
+  sensitive = true
+  value     = aws_db_instance.mysql.master_user_secret[0].secret_arn
+}
+
+output "vpc_peering_connection_id" {
+  value = aws_vpc_peering_connection.v1_to_v2.id
+}
+
 output "public_route_table_id" {
   description = "Route table shared by both public subnets"
   value       = aws_route_table.public.id
