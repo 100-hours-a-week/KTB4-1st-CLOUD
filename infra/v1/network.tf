@@ -62,21 +62,7 @@ resource "aws_vpc_security_group_ingress_rule" "service" {
   description       = each.value.description
 }
 
-# v1 state가 관리 중인 기존 v1 RDS의 복제 접근 규칙 보존
-# 기존 RDS 자체는 이번 v2 RDS 통합의 관리 대상이 아님
-data "aws_security_group" "legacy_rds_mysql" {
-  id = "sg-0d4ad6a999d126b29"
-}
-
-resource "aws_vpc_security_group_ingress_rule" "ec2_from_rds_mysql" {
-  security_group_id            = aws_security_group.v1.id
-  referenced_security_group_id = data.aws_security_group.legacy_rds_mysql.id
-  ip_protocol                  = "tcp"
-  from_port                    = 3306
-  to_port                      = 3306
-  description                  = "RDS MySQL replication access to the EC2 MySQL proxy"
-}
-
+# 기존 v1 RDS와 복제 규칙은 제거하고 새 v2 RDS 경로만 관리
 # v2 prod RDS 복제 연결을 v1 MySQL socat 포트로 허용
 resource "aws_vpc_security_group_ingress_rule" "ec2_from_v2_rds" {
   for_each          = toset(["10.20.10.0/24", "10.20.11.0/24"])
