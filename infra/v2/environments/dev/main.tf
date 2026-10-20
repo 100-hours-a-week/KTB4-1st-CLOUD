@@ -69,7 +69,7 @@ module "platform" {
   }
   initial_image_digests = var.initial_image_digests
   service_capacity = {
-    be = { desired = 2, min = 2, max = 4 }
+    be = { desired = 1, min = 1, max = 2 }
     fe = { desired = 1, min = 1, max = 2 }
     ai = { desired = 1, min = 1, max = 2 }
   }
