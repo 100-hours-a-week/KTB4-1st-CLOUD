@@ -3,6 +3,3 @@
 
 # 캐시 비밀번호 변경 후 증가
 password_version = 1
-
-# 기존 v1 EC2가 사용하는 실제 subnet ID
-v1_ec2_subnet_id = "subnet-REPLACE_WITH_EXISTING_EC2_SUBNET_ID"

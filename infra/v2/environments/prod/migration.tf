@@ -59,12 +59,11 @@ resource "aws_vpc_security_group_ingress_rule" "kafka_v1" {
 
 
 # v1 EC2의 실제 서브넷에서 출발 경로 조회
-variable "v1_ec2_subnet_id" {
-  description = "Existing v1 EC2 subnet ID for the RDS migration route"
-  type        = string
+locals {
+  v1_ec2_subnet_id = "subnet-02514cb3bc238b48d"
 }
 data "aws_subnet" "v1_ec2" {
-  id = var.v1_ec2_subnet_id
+  id = local.v1_ec2_subnet_id
 
   lifecycle {
     postcondition {

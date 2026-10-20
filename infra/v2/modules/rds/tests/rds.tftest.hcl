@@ -1,6 +1,8 @@
 mock_provider "aws" {
   mock_resource "aws_db_instance" {
+    override_during = plan
     defaults = {
+      address = "rds.example.invalid"
       master_user_secret = [{
         secret_arn    = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:test"
         kms_key_id    = "test-key"
@@ -55,4 +57,15 @@ run "reject_single_subnet" {
     rds_subnet_ids = ["subnet-test-a"]
   }
   expect_failures = [var.rds_subnet_ids]
+}
+
+run "jdbc_url_uses_application_database" {
+  command = plan
+  variables {
+    rds_database_name = "application_test"
+  }
+  assert {
+    condition     = output.jdbc_url == "jdbc:mysql://rds.example.invalid:3306/application_test"
+    error_message = "The JDBC URL must use the generated RDS endpoint, port, and selected application database."
+  }
 }
