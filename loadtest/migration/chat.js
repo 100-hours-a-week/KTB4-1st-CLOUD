@@ -1,5 +1,5 @@
 // 한 VU에서 두 사용자를 같은 방에 연결하고 각 송신의 양쪽 수신을 대조한다.
-import { WebSocket } from 'k6/websockets';
+import { WebSocket } from 'k6/experimental/websockets';
 import { setTimeout, clearTimeout } from 'k6/timers';
 import { Counter } from 'k6/metrics';
 import { check } from 'k6';
