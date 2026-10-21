@@ -6,7 +6,8 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cd "$script_dir/../.."
 
-sudo -v
+# 실제 사용하는 Docker 명령의 실행 권한을 확인
+sudo -n docker info >/dev/null
 backend_env=$(sudo docker inspect springboot --format '{{json .Config.Env}}')
 
 # 실행 중인 시험 BE의 인증 키와 허용 Origin을 사용한다.
