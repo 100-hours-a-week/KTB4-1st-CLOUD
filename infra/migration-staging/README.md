@@ -1,13 +1,14 @@
 # v1 복제 환경과 DB 전환 리허설
 
-기본 VPC에 FE·BE·AI·MySQL·Nginx용 `t4g.small`과 Kafka용 `t4g.micro`를 생성한다.
+기본 VPC에 FE·BE·AI·MySQL·Nginx용 `t4g.small` 한 대를 생성한다.
 운영과 분리한 SG·IAM 역할·업로드 버킷과 `migration/staging-v1/terraform.tfstate`를 사용한다.
-Kafka는 dev와 같은 단일 KRaft 브로커, 컨테이너 한도 768MiB다. Redis는 사용하지 않는다.
+Kafka·Redis는 배포하지 않는다. 시험 Compose는 `KAFKA_BOOTSTRAP_SERVERS`를 빈 값으로 설정하고,
+BE 내부 비동기 executor가 검색 이력을 DB에 저장한다. 운영 Kafka consumer 경로 검증은 별도다.
 EC2 종료 시 루트 EBS는 보존되므로 시험 종료 후 볼륨 정리는 별도로 확인한다.
 
 ## v1 복제 배포
 
-SSH는 두 EC2 모두 전체 IPv4에서 허용하며 `bakkucca-v1`·`bakkucca-v1-janna` 공개키를 등록한다.
+SSH는 시험 EC2에 전체 IPv4에서 허용하며 `bakkucca-v1`·`bakkucca-v1-janna` 공개키를 등록한다.
 접속 계정은 `ec2-user`다. HTTP·HTTPS는 `terraform.tfvars.json`의 `access_cidrs`로 제한한다.
 cloud-init 변경으로 기존 서버를 재생성하지 않으며, 기존 서버의 키 변경은 별도로 반영한다.
 FE는 운영 URL이 삽입되지 않도록 같은 릴리즈 소스를 시험용 공개 설정으로 빌드한다.
@@ -46,6 +47,22 @@ python3 loadtest/migration/seed.py | sudo docker exec -i mysql sh -c \
 초기 시험 배포 때 시험 EC2의 Docker에 만든 로컬 태그다. GHCR에 게시된 이미지 이름이 아니므로
 다른 서버에서 이 이름으로 pull할 수 없다. BE·AI는 기존 릴리즈 이미지를 사용했고,
 FE는 운영 API·OAuth 주소가 포함되지 않도록 시험용 공개 환경변수로 별도 빌드했다.
+비공개 이미지는 인증된 작업 PC에서 다운로드해 `docker save`/`docker load`로 전달했거나,
+시험 EC2에서 임시 registry 인증으로 다운로드했다. 실행할 때마다 GHCR 인증을 요청하는 구조는 아니며,
+이미지 레이어가 EC2에 있으면 로컬 이미지로 컨테이너를 실행할 수 있다. 새 이미지를 pull할 때는 인증이 필요하다.
+
+BE·AI는 로컬 별칭 대신 공식 참조를 사용한다.
+
+```dotenv
+SPRINGBOOT_IMAGE=ghcr.io/100-hours-a-week/ktb4-1st-be:v2.0.0
+FASTAPI_IMAGE=ghcr.io/100-hours-a-week/ktb4_1st_ai:2.0.0
+```
+
+FE의 게시된 `ghcr.io/100-hours-a-week/ktb4-1st-fe:2.0.0`은 API가 `/api`지만
+Kakao callback이 `https://bakkucca.com/api/auth/kakao/callback`으로 빌드되어 있다.
+이 이미지는 시험 도메인의 OAuth 검증에 사용할 수 없으므로 시험용 FE를 유지한다.
+`NEXTJS_IMAGE` 외에 새 이미지 필드는 필요하지 않으며, 시험용 공개 설정으로 게시한 이미지가 준비되면
+해당 변수만 교체한다. 컨테이너 실행 시 env 추가만으로 브라우저 번들의 callback을 변경할 수는 없다.
 
 이후 BE 교체에는 main 코드로 빌드·게시한 GHCR 시맨틱 버전 이미지를 직접 지정한다.
 예를 들어 기존 릴리즈의 BE 참조는 `ghcr.io/100-hours-a-week/ktb4-1st-be:v2.0.0`이다.
@@ -137,6 +154,18 @@ sudoedit /opt/app/shared/.env.shared
 기존 환경변수를 유지하고 다음 항목을 추가·수정한다. RDS 계정·비밀번호는 담당자가 Secrets Manager에서 확인한 값으로 입력한다.
 `.env.shared`는 root 소유·권한 600으로 유지하고 `source`하거나 출력하지 않는다.
 
+값을 찾는 위치와 적용 방식은 다음과 같다.
+
+- URL: AWS RDS 콘솔 → `bakkucca-v2-staging-mysql` → 연결 및 보안의 endpoint·port를 사용한다. DB 이름은 `market`이다.
+- 계정: 해당 RDS 구성의 마스터 사용자 이름은 `admin`이다. 담당자가 별도 애플리케이션 계정을 만들었다면 그 계정을 사용한다.
+- 비밀번호: RDS 구성의 마스터 자격 증명 ARN 링크 → Secrets Manager → 비밀 값 검색에서 `password`를 확인한다. 비밀 전체 JSON이 아니라 비밀번호 값만 입력한다.
+- 풀 설정: `8`과 `2`는 조회하는 비밀값이 아니라 시험 EC2의 메모리·연결 수에 맞춘 설정이다.
+
+`--env-file /opt/app/shared/.env.shared`로 Compose가 파일을 읽고,
+`docker-compose.migration.yml`의 `environment` 매핑으로 `MIGRATION_*`를 BE 컨테이너에 주입한다.
+BE는 `migration` 프로필에서 이 값을 사용한다. 파일 저장만으로 실행 중인 BE 설정은 바뀌지 않으며,
+아래 `up`으로 컨테이너를 재생성해야 한다. Secrets Manager에서 직접 읽는 BE 코드나 별도 env 파일은 필요하지 않다.
+
 ```dotenv
 SPRINGBOOT_IMAGE=<마이그레이션 관리자 API를 제공하는 ARM64 BE 이미지 또는 digest>
 MIGRATION_RDS_DB_URL=jdbc:mysql://<RDS 호스트>:3306/market?sslMode=REQUIRED
@@ -146,7 +175,7 @@ MIGRATION_DB_MAX_POOL_SIZE=8
 MIGRATION_DB_MIN_IDLE=2
 ```
 
-이미지 버전 이름만으로 migration 지원 여부를 판단하지 않는다. BE가 EC2/RDS datasource 라우팅과 쓰기 barrier 관리자 API를 제공해야 한다.
+BE는 EC2/RDS datasource 라우팅과 쓰기 barrier 관리자 API를 제공하는 마이그레이션용 이미지를 사용한다.
 기존 `docker-compose.migration.yml`은 리허설과 운영 이관에 공통으로 사용하고, `docker-compose.rehearsal.yml`은 시험 환경 설정에만 사용한다.
 
 ```bash
@@ -398,7 +427,7 @@ run_migration scripts/mysql-rds-switch-traffic.sh
 
 ### 6. 누락·중복 확인과 롤백
 
-트래픽이 정상 종료되고 Kafka consumer 처리가 끝난 뒤 역방향 복제의 IO/SQL이 모두 Yes, 오류 없음, 지연 0인지 확인한다.
+트래픽이 정상 종료되고 BE 비동기 검색 이력 저장이 끝난 뒤 역방향 복제의 IO/SQL이 모두 Yes, 오류 없음, 지연 0인지 확인한다.
 지연 0뿐 아니라 최종 RDS binlog 좌표까지 EC2에 적용됐는지 확인하고 그동안 다른 쓰기를 실행하지 않는다.
 3번과 같은 세션에서 `RUN_ID`를 4번에서 사용한 값으로 설정하고 두 DB의 시험 데이터를 출력한다.
 
@@ -420,7 +449,7 @@ python3 loadtest/migration/verify.py --run "$RUN_ID" \
 ```
 
 `passed: true`와 종료 코드 0을 확인한다. 요청 실패·타임아웃, 누락·중복, DB 간 ID 차이가 있으면 실패로 판정한다.
-검사 대상은 그룹 생성과 Kafka를 통한 검색 이력이다. 전체 테이블 정합성 비교와 FE·AI·OAuth 시험은 별도로 수행한다.
+검사 대상은 그룹 생성과 BE 내부 비동기 executor를 통한 검색 이력이다. 전체 테이블 정합성 비교와 FE·AI·OAuth 시험은 별도로 수행한다.
 
 RDS의 최신 쓰기까지 EC2에 반영됐다고 확인한 경우에만 롤백한다.
 

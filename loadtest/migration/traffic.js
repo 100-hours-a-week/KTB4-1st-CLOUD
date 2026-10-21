@@ -57,7 +57,7 @@ export default function () {
   request('POST', '/groups', user, {
     groupName: marker, roadAddress: '서울특별시 시험로 1', longitude: 127, latitude: 37.5, groupContent: marker,
   }, 'group', marker, 201);
-  // 시드 그룹의 기존 멤버로 검색하면 Kafka consumer가 검색 이력을 저장한다.
+  // 시드 그룹의 기존 멤버로 검색하면 BE 내부 비동기 executor가 검색 이력을 저장한다.
   request('GET', `/items?groupId=1&keyword=${encodeURIComponent(marker)}`, 1, null, 'search', marker, 200);
 }
 

@@ -59,11 +59,6 @@ resource "aws_security_group" "source" {
   description = "Isolated v1 rehearsal instance in the default VPC"
   vpc_id      = data.aws_subnet.source.vpc_id
 }
-resource "aws_security_group" "kafka" {
-  name        = "bakkucca-migration-staging-kafka"
-  description = "Rehearsal Kafka; no production consumers"
-  vpc_id      = data.aws_subnet.source.vpc_id
-}
 resource "aws_vpc_security_group_ingress_rule" "source" {
   for_each = {
     for pair in setproduct(var.access_cidrs, toset(["80", "443"])) :
@@ -76,29 +71,22 @@ resource "aws_vpc_security_group_ingress_rule" "source" {
   to_port           = each.value.port
 }
 resource "aws_vpc_security_group_ingress_rule" "ssh" {
-  for_each          = { source = aws_security_group.source.id, kafka = aws_security_group.kafka.id }
+  for_each          = { source = aws_security_group.source.id }
   security_group_id = each.value
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "tcp"
   from_port         = 22
   to_port           = 22
 }
-resource "aws_vpc_security_group_ingress_rule" "kafka" {
-  security_group_id            = aws_security_group.kafka.id
-  referenced_security_group_id = aws_security_group.source.id
-  ip_protocol                  = "tcp"
-  from_port                    = 9092
-  to_port                      = 9092
-}
 resource "aws_vpc_security_group_egress_rule" "outbound" {
-  for_each          = { source = aws_security_group.source.id, kafka = aws_security_group.kafka.id }
+  for_each          = { source = aws_security_group.source.id }
   security_group_id = each.value
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }
 
 resource "aws_iam_role" "instance" {
-  for_each = toset(["source", "kafka"])
+  for_each = toset(["source"])
   name     = "bakkucca-migration-staging-${each.key}"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
@@ -170,7 +158,6 @@ resource "aws_iam_role_policy" "uploads" {
 resource "aws_instance" "rehearsal" {
   for_each = {
     source = { type = "t4g.small", disk = 30, sg = aws_security_group.source.id }
-    kafka  = { type = "t4g.micro", disk = 20, sg = aws_security_group.kafka.id }
   }
   ami                         = data.aws_ami.arm64.id
   instance_type               = each.value.type
@@ -180,7 +167,7 @@ resource "aws_instance" "rehearsal" {
   key_name                    = "bakkucca-v1"
   iam_instance_profile        = aws_iam_instance_profile.instance[each.key].name
   user_data_replace_on_change = true
-  user_data = join("\n", [<<-BOOT
+  user_data                   = <<-BOOT
     #!/bin/bash
     set -euo pipefail
     dnf install -y docker openssl python3 tar gzip
@@ -195,9 +182,9 @@ resource "aws_instance" "rehearsal" {
     install -d /usr/local/lib/docker/cli-plugins /opt/bakkucca-migration
     curl -fsSL --retry 5 https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-aarch64 -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod 755 /usr/local/lib/docker/cli-plugins/docker-compose
-    ${each.key == "source" ? "dnf install -y socat mariadb105" : ""}
+    dnf install -y socat mariadb105
     BOOT
-  , each.key == "kafka" ? file("${path.module}/kafka.sh") : ""])
+
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 2
@@ -226,5 +213,4 @@ output "v1_network" {
     security_group_id = aws_security_group.source.id
   }
 }
-output "kafka_bootstrap_servers" { value = "${aws_instance.rehearsal["kafka"].private_ip}:9092" }
 output "uploads_bucket" { value = aws_s3_bucket.uploads.id }
