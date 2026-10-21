@@ -19,8 +19,7 @@ const ORIGIN = __ENV.CHAT_ORIGIN || BASE.replace(/\/api$/, '');
 const SESSIONS = Number(__ENV.WRITE_SESSIONS || 10);
 const READS = RATE * MINUTES * 60;
 const readRequests = new Counter('read_requests');
-const STEPS = ['group', 'search', 'item_list', 'item_detail', 'my_items', 'item_update',
-  'item_updated', 'item_delete', 'item_deleted', 'exchange_create', 'exchange_detail',
+const STEPS = ['group', 'search', 'item_list', 'item_detail', 'my_items', 'item_delete', 'item_deleted', 'exchange_create', 'exchange_detail',
   'chat_history', 'exchange_cancel'];
 const apiRequests = new Counter('api_requests');
 const apiSessions = new Counter('api_sessions_completed');
@@ -50,6 +49,9 @@ export const options = {
       executor: 'constant-arrival-rate', exec: 'apiTraffic', rate: SESSIONS, timeUnit: `${MINUTES}m`, duration: `${MINUTES}m`,
       preAllocatedVUs: 10, maxVUs: 100, gracefulStop: '90s',
     },
+    // 같은 물건을 6초마다 수정하며, 요청 순서를 유지하도록 VU를 하나만 사용한다.
+    updates: { executor: 'constant-arrival-rate', exec: 'updateTraffic', rate: 10, timeUnit: '1m',
+      duration: `${MINUTES}m`, preAllocatedVUs: 1, maxVUs: 1, gracefulStop: '90s' },
     reads: { executor: 'constant-arrival-rate', exec: 'readTraffic', rate: RATE, timeUnit: '1s',
       duration: `${MINUTES}m`, preAllocatedVUs: 10, maxVUs: 100, gracefulStop: '90s' },
     chat: { executor: 'constant-vus', exec: 'chatTraffic', vus: CHAT_PAIRS, duration: `${MINUTES}m`, gracefulStop: '90s' },
@@ -64,7 +66,7 @@ export const options = {
 };
 
 export function setup() {
-  log({ kind: 'config', schema: 4, sessions: SESSIONS, reads: READS, steps: STEPS, chat_pairs: CHAT_PAIRS,
+  log({ kind: 'config', schema: 4, sessions: SESSIONS, updates: MINUTES * 10, reads: READS, steps: STEPS, chat_pairs: CHAT_PAIRS,
     excluded: ['item_create_ai', 'real_oauth', 'frontend', 'ai', 'kafka_consumer'] });
 }
 
@@ -90,16 +92,14 @@ export function apiTraffic() {
   const seq = exec.scenario.iterationInTest;
   const marker = `mg-${RUN}-${seq}`;
   log({ kind: 'api_session_start', key: marker });
-  // 소량 시드의 수정·삭제·교환 슬롯 10개를 시험 시간에 걸쳐 한 번씩 사용한다.
+  // 소량 시드의 삭제·교환 슬롯 10개를 시험 시간에 걸쳐 한 번씩 사용한다.
   const user = 1 + 2 * seq;
   const owner = user + 1;
   const group = 1;
-  const edited = (user - 1) * 10 + 2;
   const offered = (user - 1) * 10 + 6;
   const target = (owner - 1) * 10 + 6;
   const deleted = 20001 + seq;
   const deleteOwner = 1 + Math.floor(seq / 2);
-  const quantity = 7;
   request('POST', '/groups', 2001 + seq, {
     groupName: marker, roadAddress: '서울특별시 시험로 1', longitude: 127, latitude: 37.5, groupContent: marker,
   }, 'group', marker, 201);
@@ -111,12 +111,6 @@ export function apiTraffic() {
     {}, d => d && d.itemId === target);
   request('GET', '/users/me/items?size=10', user, null, 'my_items', marker, 200,
     {}, d => d && Array.isArray(d.items) && d.items.length > 0);
-  request('PUT', `/items/${edited}`, user, {
-    title: marker, content: marker, quantity, itemState: 'AVAILABLE', exchangeUrgencyScore: 0.5,
-    valueGapToleranceScore: 0.5, groupIds: [group], imageIds: [edited * 2 - 1, edited * 2],
-  }, 'item_update', marker, 204, { item: edited, quantity, group });
-  request('GET', `/items/${edited}`, user, null, 'item_updated', marker, 200,
-    {}, d => d && d.itemId === edited && d.title === marker && d.content === marker && d.quantity === quantity);
   request('DELETE', `/items/${deleted}`, deleteOwner, null, 'item_delete', marker, 204, { item: deleted });
   request('GET', `/items/${deleted}`, deleteOwner, null, 'item_deleted', marker, 404);
   const exchange = request('POST', `/items/${target}/exchange-requests`, user, {
@@ -132,6 +126,15 @@ export function apiTraffic() {
   }
   log({ kind: 'api_session_end', key: marker });
   apiSessions.add(1);
+}
+
+export function updateTraffic() {
+  const marker = `mg-${RUN}-update-${exec.scenario.iterationInTest}`;
+  const user = 1, edited = 2, group = 1, quantity = 7;
+  request('PUT', `/items/${edited}`, user, {
+    title: marker, content: marker, quantity, itemState: 'AVAILABLE', exchangeUrgencyScore: 0.5,
+    valueGapToleranceScore: 0.5, groupIds: [group], imageIds: [edited * 2 - 1, edited * 2],
+  }, 'item_update', marker, 204, { item: edited, quantity, group });
 }
 
 export function readTraffic() {

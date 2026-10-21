@@ -17,6 +17,7 @@ STEPS = {
 def verify(ledger, source, rds, summary, run):
     errors, configs = [], []
     requests, sends, received, opened, ended = {}, {}, Counter(), {}, {}
+    updates = {}
     starts, session_starts, session_ends = set(), set(), set()
     stop_file = Path(summary).with_name(f'{run}-stop.json')
     partial = False
@@ -35,7 +36,7 @@ def verify(ledger, source, rds, summary, run):
             configs.append(entry)
         elif kind == 'request_start':
             identifier = (entry['step'], entry['key'])
-            if identifier in starts or entry['step'] not in STEPS:
+            if identifier in starts or entry['step'] not in (*STEPS, 'item_update'):
                 errors.append('duplicate/unknown request start')
             starts.add(identifier)
         elif kind in ('api_session_start', 'api_session_end'):
@@ -43,6 +44,11 @@ def verify(ledger, source, rds, summary, run):
             if entry['key'] in entries:
                 errors.append(f'duplicate {kind}')
             entries.add(entry['key'])
+        elif kind == 'item_update' and '-update-' in entry['key']:
+            identifier = (kind, entry['key'])
+            if identifier in updates or entry.get('status') != 204 or entry.get('expected') != 204 or entry.get('valid') is not True:
+                errors.append('duplicate/failed item update')
+            updates[identifier] = entry
         elif kind in STEPS:
             identifier = (kind, entry['key'])
             if identifier in requests:
@@ -70,18 +76,19 @@ def verify(ledger, source, rds, summary, run):
             errors.append(f'unexpected ledger event: {kind}')
 
     config = configs[0] if len(configs) == 1 else {}
-    if len(configs) != 1 or config.get('schema') != 4 or set(config.get('steps', [])) != set(STEPS):
+    flow_steps = {k: v for k, v in STEPS.items() if not config.get('updates') or k not in ('item_update', 'item_updated')}
+    if len(configs) != 1 or config.get('schema') != 4 or set(config.get('steps', [])) != set(flow_steps):
         errors.append('missing/duplicate/incompatible config; fresh run required')
     sessions = config.get('sessions', 0)
     if not isinstance(sessions, int) or not 1 <= sessions <= 10:
         errors.append('invalid planned sessions')
         sessions = 0
     # 총수뿐 아니라 각 세션의 필수 요청이 모두 실행됐는지 확인한다.
-    wanted_requests = {(kind, f'mg-{run}-{seq}') for seq in range(sessions) for kind in STEPS}
+    wanted_requests = {(kind, f'mg-{run}-{seq}') for seq in range(sessions) for kind in flow_steps}
     if not set(requests) <= wanted_requests or (not partial and set(requests) != wanted_requests):
         errors.append('incomplete API session coverage')
     # 수동 종료라도 보낸 요청의 응답이 없으면 실패로 판정한다.
-    if starts != set(requests):
+    if starts != set(requests) | set(updates):
         errors.append('request started without matching response')
     planned_keys = {f'mg-{run}-{seq}' for seq in range(sessions)}
     if not session_starts <= planned_keys or not session_ends <= session_starts or not requests:
@@ -89,12 +96,17 @@ def verify(ledger, source, rds, summary, run):
     if any(key not in session_starts for _, key in requests):
         errors.append('request without session start')
     for key in session_starts:
-        executed = [step for step in STEPS if (step, key) in requests]
-        complete = len(executed) == len(STEPS)
-        if executed != list(STEPS)[:len(executed)]:
+        executed = [step for step in flow_steps if (step, key) in requests]
+        complete = len(executed) == len(flow_steps)
+        if executed != list(flow_steps)[:len(executed)]:
             errors.append('API step skipped before manual stop')
         if (key in session_ends and not complete) or (not partial and key not in session_ends):
             errors.append('incomplete API session')
+
+    planned_updates = config.get('updates', 0)
+    wanted_updates = {('item_update', f'mg-{run}-update-{seq}') for seq in range(planned_updates)}
+    if not set(updates) <= wanted_updates or (not partial and set(updates) != wanted_updates):
+        errors.append('incomplete item update coverage')
 
     metrics = json.loads(Path(summary).read_text()).get('metrics', {})
     def metric(name, field):
@@ -114,7 +126,7 @@ def verify(ledger, source, rds, summary, run):
     for name, expected in (('checks', 1), ('http_req_failed', 0)):
         if metric(name, 'rate') != expected:
             errors.append(f'{name} did not pass')
-    for name, expected in (('api_requests', len(requests)), ('api_sessions_completed', len(session_ends)),
+    for name, expected in (('api_requests', len(requests) + len(updates)), ('api_sessions_completed', len(session_ends)),
                            ('chat_messages_sent', len(sends)), ('chat_sessions_started', len(opened)),
                            ('chat_sessions_completed', len(ended))):
         if metric(name, 'count') != expected:
@@ -168,6 +180,13 @@ def verify(ledger, source, rds, summary, run):
                 'group': entry['group'], 'offered': entry['offered'], 'offered_quantity': 1, 'offered_count': 1,
                 'room': result.get('room'), 'room_status': 'CLOSED' if canceled else 'OPEN', 'members': [entry['user'], entry['user'] + 1], 'views': 1},
                 str(result.get('id')))
+    if updates:
+        # 하나의 VU가 순서대로 수정하므로 마지막 요청의 값이 최종 DB 값이다.
+        entry = max(updates.values(), key=lambda e: int(e['key'].rsplit('-', 1)[1]))
+        key, item = entry['key'], entry['item']
+        expected_rows[('item_update', key, str(entry['user']))] = ({
+            'content': key, 'quantity': entry['quantity'], 'state': 'AVAILABLE', 'deleted': 0,
+            'group': entry['group'], 'group_count': 1, 'images': [item * 2 - 1, item * 2], 'views': 0}, str(item))
     for key, entry in sends.items():
         ids = message_ids.get(key, set())
         expected_rows[('chat', key, str(entry['user']))] = ({'room': entry['room']}, next(iter(ids)) if len(ids) == 1 else None)

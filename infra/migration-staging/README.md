@@ -187,12 +187,20 @@ sudo docker exec springboot sh -c '
 bash /opt/app/releases/rehearsal-2.0.0/loadtest/migration/run.sh
 ```
 
-- 기본: 목록 조회 초당 1회, 수정·삭제·교환 흐름 총 10회 자동 분산, 채팅 2쌍 송수신
+- 기본: 목록 조회 초당 1회, 물건 수정 분당 10회(6초 간격), 삭제·교환 등의 API 흐름 총 10회 자동 분산, 채팅 2쌍 송수신
 - 최대 30분 실행하며, DB 전환과 확인을 마치면 Ctrl+C로 종료 가능
 - 부하 실행 중 다른 SSH 세션에서 7~8절의 DB 복제·전환 수행
 - 결과는 릴리즈 폴더의 `results/<시험 ID>/`에 저장. 출력된 시험 ID로 9절 검증 수행
 - 수동 종료 시 실행한 구간만 검증하며, 응답 없는 요청·메시지 누락은 실패로 판정
-- 반복 실행 전 시험 DB를 초기 시드 상태로 복원. 운영 서버에서는 실행하지 않음
+- 반복 실행 전 시험 DB를 초기 시드 상태로 복원
+
+파일 수정 후 로컬에서 아래 명령어로 ec2에 반영
+
+```bash
+tar --exclude=__pycache__ -czf - loadtest/migration |
+ssh -i ~/.ssh/bakkucca_v1 "ec2-user@<EC2_IP>" \
+  'sudo tar -xzf - -C /opt/app/releases/rehearsal-2.0.0'
+```
 
 ## 7. 주 SSH 세션: 데이터 복사와 binlog 복제
 
