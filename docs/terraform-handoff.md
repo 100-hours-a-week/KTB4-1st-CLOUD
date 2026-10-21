@@ -35,7 +35,9 @@ plan을 했을 때 변경 사항이 있으면 안됩니다.
 
 ## 2. 작업 규칙 (Terraform으로 할 때)
 
-- **State 잠금이 없다.** plan/apply 전에 채팅으로 알리고, 두 사람이 동시에 apply하지 않는다.
+- `tobby`, `janna` 계정과 `Infra-Admin` 그룹의 관리 위치는 [infra/iam](../infra/iam/README.md)이며, v1과 독립된 state를 사용한다. v1의 `iam-migration.tf`는 기존 계정을 삭제하지 않는 이전 기록이다.
+
+- **v1 state 잠금이 없다.** plan/apply 전에 채팅으로 알리고, 두 사람이 동시에 apply하지 않는다. `infra/iam`과 v2 환경 state는 S3 lockfile을 사용한다.
 - 시작 전 `git pull`. 코드가 main보다 뒤처진 상태로 apply하면 다른 사람이 추가한 리소스를 지우는 plan이 나온다.
 - `terraform destroy`, `terraform state rm/mv`, `terraform import` 지양
 - plan에서 아래가 보이면 **즉시 중단**:
