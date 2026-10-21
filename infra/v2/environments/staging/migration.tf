@@ -1,4 +1,4 @@
-# 시험용 v1을 준비한 뒤 해당 네트워크만 연결
+# 마이그레이션과 롤백에 사용하는 시험용 v1 네트워크 유지
 variable "v1_network" {
   type = object({
     vpc_id            = string
@@ -6,7 +6,12 @@ variable "v1_network" {
     route_table_id    = string
     security_group_id = string
   })
-  default = null
+  default = {
+    vpc_id            = "vpc-0960be8657a868514"
+    cidr_block        = "172.31.0.0/16"
+    route_table_id    = "rtb-0de83705843536193"
+    security_group_id = "sg-070a9c527a6292fb2"
+  }
 }
 
 # 시험용 v1과 스테이징 VPC의 사설 통신 연결
