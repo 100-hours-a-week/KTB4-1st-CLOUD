@@ -489,11 +489,7 @@ SHOW BINARY LOG STATUS;
 
    공통 환경변수
    ```bash
-   export RDS_HOST='<RDS_ENDPOINT>'
    export RDS_PORT='3306'
-   export RDS_USER='<RDS_ADMIN_USER>'
-   export RDS_PASSWORD='<RDS_ADMIN_PASSWORD>'
-   export EC2_MYSQL_PASSWORD='<EC2_MYSQL_ROOT_PASSWORD>'
    export EC2_CONTAINER='mysql'
    export WAS_ADMIN_CONTAINER='springboot'
    # 관리자 API가 WAS 컨테이너 내부 localhost만 허용하므로 컨테이너 안에서 호출한다.
@@ -535,13 +531,13 @@ SHOW BINARY LOG STATUS;
 
    실행 순서
    ```bash
-   cd /home/ubuntu/bakkucca
-   test -x /home/ubuntu/bakkucca/scripts/mysql-rds-validate.sh
-   run_migration /home/ubuntu/bakkucca/scripts/mysql-rds-validate.sh
-   run_migration /home/ubuntu/bakkucca/scripts/mysql-rds-prepare-drain.sh
-   run_migration /home/ubuntu/bakkucca/scripts/mysql-rds-promote.sh
-   run_migration /home/ubuntu/bakkucca/scripts/mysql-rds-arm-reverse-replica.sh
-   run_migration /home/ubuntu/bakkucca/scripts/mysql-rds-switch-traffic.sh
+   cd <scripts 저장 경로>
+   test -x ./mysql-rds-validate.sh
+   run_migration ./mysql-rds-validate.sh
+   run_migration ./mysql-rds-prepare-drain.sh
+   run_migration ./mysql-rds-promote.sh
+   run_migration ./mysql-rds-arm-reverse-replica.sh
+   run_migration ./mysql-rds-switch-traffic.sh
    ```
    `prepare-drain` 또는 `promote` 단계가 실패하면 쓰기 barrier가 유지될 수 있다. RDS 승격 전이면 원인을 확인한 뒤 `../scripts/mysql-rds-abort.sh`를 실행하고, RDS 승격 후에는 abort를 실행하지 말고 현재 barrier 상태를 유지한 채 운영 담당자가 수동으로 복구한다.
 
