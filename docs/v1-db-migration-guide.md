@@ -445,10 +445,20 @@ SHOW BINARY LOG STATUS;
    ```
 5. **[EC2 ubuntu → RDS]** RDS에 복원하고, 복원 성공 여부를 확인한다.
    ```bash
-   nohup sh -c '
-   mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" < "$DUMP_FILE"
-   ' > /tmp/rds-restore.log 2>&1 &
-   
+   export MYSQL_PWD="$RDS_PASSWORD"
+
+   nohup env MYSQL_PWD="$RDS_PASSWORD" \
+   mysql --protocol=tcp \
+   -h "$RDS_HOST" \
+   -u "$RDS_USER" \
+   < "$DUMP_FILE" \
+   > /tmp/rds-restore.log 2>&1 &
+
+   RESTORE_PID=$!
+   echo "$RESTORE_PID" > /tmp/rds-restore.pid
+   wait "$RESTORE_PID"
+
+   export MYSQL_PWD="$RDS_PASSWORD"
    mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" \
      -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}';"
    ```
@@ -531,6 +541,8 @@ SHOW BINARY LOG STATUS;
 
    실행 순서
    ```bash
+   set -Eeuo pipefail
+   
    cd <scripts 저장 경로>
    test -x ./mysql-rds-validate.sh
    run_migration ./mysql-rds-validate.sh
