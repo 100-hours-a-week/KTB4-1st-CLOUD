@@ -416,7 +416,18 @@ SHOW BINARY LOG STATUS;
    GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO '${REPL_USER}'@'${DOCKER_BRIDGE_GATEWAY}';
    FLUSH PRIVILEGES;"
    ```
-3. **[EC2 ubuntu → RDS]** RDS에서 rollback용 계정을 만든다. RDS 셸이 아니라 EC2 ubuntu에서 아래 `mysql` 명령을 실행한다. 이 계정은 EC2의 실제 사설 IP만 허용한다.
+   검증
+   ```
+   export MYSQL_PWD="$REPL_PASSWORD"
+
+   mysql \
+   --protocol=tcp \
+   -h "$EC2_PRIVATE_IP" \
+   -P 3306 \
+   -u "$REPL_USER" \
+   -e "SELECT 1;"
+   ```
+4. **[EC2 ubuntu → RDS]** RDS에서 rollback용 계정을 만든다. RDS 셸이 아니라 EC2 ubuntu에서 아래 `mysql` 명령을 실행한다. 이 계정은 EC2의 실제 사설 IP만 허용한다.
    ```bash
    export MYSQL_PWD="$RDS_PASSWORD"
    mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" -e "
@@ -427,7 +438,18 @@ SHOW BINARY LOG STATUS;
    FLUSH PRIVILEGES;
    CALL mysql.rds_show_configuration;"
    ```
-4. **[EC2 ubuntu + MySQL container]** 데이터 덤프를 생성한다. 이 명령은 DDL을 동결한 상태에서 실행한다.
+   검증
+   ```
+   export MYSQL_PWD="$REVERSE_REPL_PASSWORD"
+
+   mysql \
+   --protocol=tcp \
+   -h "$RDS_HOST" \
+   -P 3306 \
+   -u "$REVERSE_REPL_USER" \
+   -e "SELECT 1;"
+   ```
+5. **[EC2 ubuntu + MySQL container]** 데이터 덤프를 생성한다. 이 명령은 DDL을 동결한 상태에서 실행한다.
    ```bash
    set -euo pipefail
    sudo docker exec -e MYSQL_PWD="$EC2_MYSQL_PASSWORD" mysql \
@@ -444,7 +466,7 @@ SHOW BINARY LOG STATUS;
    test -s "$DUMP_FILE"
    grep -m 1 -E 'CHANGE (MASTER|REPLICATION SOURCE) TO' "$DUMP_FILE"
    ```
-5. **[EC2 ubuntu → RDS]** RDS에 복원하고, 복원 성공 여부를 확인한다.
+6. **[EC2 ubuntu → RDS]** RDS에 복원하고, 복원 성공 여부를 확인한다.
    ```bash
    export MYSQL_PWD="$RDS_PASSWORD"
 
@@ -464,7 +486,7 @@ SHOW BINARY LOG STATUS;
      -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}';"
    ```
    복원 명령이 0이 아닌 코드로 끝나거나 테이블 수가 원본과 다르면 중단한다. 원본과 RDS에서 핵심 테이블 행 수, `SHOW CREATE TABLE`, index, trigger, event, routine, charset/collation, `flyway_schema_history`를 비교한다. 비교가 끝날 때까지 애플리케이션 트래픽 전환을 시작하지 않는다.
-6. **[EC2 ubuntu → RDS]** 덤프에 기록된 시작 좌표로 RDS 외부 복제를 설정한다.
+7. **[EC2 ubuntu → RDS]** 덤프에 기록된 시작 좌표로 RDS 외부 복제를 설정한다.
    ```bash
    export SOURCE_LOG_FILE="$(grep -m 1 -oE "(SOURCE|MASTER)_LOG_FILE='[^']+'" "$DUMP_FILE" | cut -d"'" -f2)"
    export SOURCE_LOG_POS="$(grep -m 1 -oE '(SOURCE|MASTER)_LOG_POS=[0-9]+' "$DUMP_FILE" | cut -d= -f2)"
@@ -476,14 +498,14 @@ SHOW BINARY LOG STATUS;
    );
    CALL mysql.rds_start_replication;"
    ```
-7. **[EC2 ubuntu → RDS]** 복제 상태를 확인한다. 이 단계가 RDS에서 EC2 MySQL로의 실제 네트워크·인증·binlog 연결 검증이다. 다음 조건이 모두 충족될 때만 8단계로 이동한다.
+8. **[EC2 ubuntu → RDS]** 복제 상태를 확인한다. 이 단계가 RDS에서 EC2 MySQL로의 실제 네트워크·인증·binlog 연결 검증이다. 다음 조건이 모두 충족될 때만 8단계로 이동한다.
    ```bash
    export MYSQL_PWD="$RDS_PASSWORD"
    mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" \
      -e 'SHOW REPLICA STATUS\G'
    ```
    `Replica_IO_Running=Yes`, `Replica_SQL_Running=Yes`, `Last_IO_Error`와 `Last_SQL_Error`가 비어 있고, `Seconds_Behind_Source`가 감소하거나 0이어야 한다. 오류가 있거나 source coordinate가 진행하지 않으면 다음 단계로 진행하지 말고 원인부터 해결한다.
-8. **[EC2 root via run_migration] 트래픽 전환**
+9. **[EC2 root via run_migration] 트래픽 전환**
    > RDS의 복제 상태와 데이터 정합성을 확인한 후 진행한다.
    > 전환 중 신규 쓰기는 애플리케이션 barrier에서 대기시키고, 기존 트랜잭션이 끝난 뒤에만 원본을 봉인한다. timeout이나 복제 오류가 발생하면 강제 진행하지 않는다.
 
