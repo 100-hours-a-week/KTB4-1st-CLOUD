@@ -40,6 +40,41 @@ python3 loadtest/migration/seed.py | sudo docker exec -i mysql sh -c \
 시험 Nginx는 자체 서명 인증서를 사용한다. 실제 OAuth 시험 전 staging 도메인·신뢰할 수 있는
 인증서·Kakao redirect URI를 일치시켜야 한다. 인스턴스 기동과 OAuth 성공 검증은 구분한다.
 
+### 이미지 위치와 BE 이미지 교체
+
+`bakkucca-be-rehearsal:2.0.0`, `bakkucca-fe-rehearsal:2.0.0`, `bakkucca-ai-rehearsal:2.0.0`은
+초기 시험 배포 때 시험 EC2의 Docker에 만든 로컬 태그다. GHCR에 게시된 이미지 이름이 아니므로
+다른 서버에서 이 이름으로 pull할 수 없다. BE·AI는 기존 릴리즈 이미지를 사용했고,
+FE는 운영 API·OAuth 주소가 포함되지 않도록 시험용 공개 환경변수로 별도 빌드했다.
+
+이후 BE 교체에는 main 코드로 빌드·게시한 GHCR 시맨틱 버전 이미지를 직접 지정한다.
+예를 들어 기존 릴리즈의 BE 참조는 `ghcr.io/100-hours-a-week/ktb4-1st-be:v2.0.0`이다.
+버전별 정확한 태그는 릴리즈 manifest를 확인한다. BE 태그의 `v` 접두사를 임의로 빼지 않는다.
+FE는 `NEXT_PUBLIC_*`가 빌드 시 포함되므로 운영 이미지를 그대로 사용하기 전에 시험 환경 주소인지 확인한다.
+
+시험 EC2에서 `/opt/app/shared/.env.shared`의 `SPRINGBOOT_IMAGE`만 새 이미지로 수정한다.
+기존 DB 비밀번호·JWT 키 등은 유지한다. RDS 마이그레이션 설정은 아래 「접속 및 BE 설정」을 따른다.
+
+```bash
+sudoedit /opt/app/shared/.env.shared
+# SPRINGBOOT_IMAGE=ghcr.io/100-hours-a-week/ktb4-1st-be:<게시된 버전 태그>
+
+cd /opt/app/releases/rehearsal-2.0.0
+sudo docker compose --env-file /opt/app/shared/.env.shared \
+  -f docker-compose.yml -f loadtest/migration/docker-compose.rehearsal.yml \
+  pull springboot
+sudo docker compose --env-file /opt/app/shared/.env.shared \
+  -f docker-compose.yml -f loadtest/migration/docker-compose.rehearsal.yml \
+  up -d --no-deps --wait springboot
+```
+
+비공개 GHCR 이미지라면 pull 전에 `sudo docker login ghcr.io`로 읽기 권한이 있는 계정을 인증한다.
+마이그레이션 프로필을 사용하는 BE로 교체할 때는 **위 두 Compose 명령 모두**
+`-f docker-compose.migration.yml`을 `pull` 또는 `up` 앞에 추가한다.
+이미 migration 프로필로 실행 중이면 교체할 때도 이 파일을 포함해야 한다.
+env 수정이나 `docker restart`만으로 새 이미지·환경변수가 반영되지는 않는다.
+BE 컨테이너 교체 중 요청 중단이 발생할 수 있으므로 k6는 교체 완료 후 실행한다.
+
 ## v2 staging의 RDS 우선 준비
 
 기존 staging root의 VPC·private subnet 두 개·route table·BE SG·RDS 모듈을 사용한다.
@@ -70,6 +105,13 @@ RDS는 기존 설정대로 MySQL 8.4, Multi-AZ, 암호화, 백업과 삭제 방�
 인프라 생성과 DB 전환은 별도 작업이다. 아래 순서는 **시험용 v1 EC2 → staging RDS**를 대상으로 한다.
 FE·AI·Nginx의 배포 위치는 유지하고 BE의 DB 연결 대상만 바꾼다. ECS 이전과 운영 DB 이관은 이 시험 이후 별도로 진행한다.
 기존 [DB 마이그레이션 가이드](../../docs/v1-db-migration-guide.md)의 절차를 AL2023 시험 EC2 기준으로 실행한다.
+
+### 기존 DB 마이그레이션 가이드에서 수정된 점
+
+- Ubuntu 명령을 시험 EC2의 AL2023 명령으로 변경
+- 시험 EC2·staging RDS의 주소와 실행 경로 사용
+- 다른 VPC 사이의 피어링·라우팅·보안그룹 반영
+- 기존 문서의 socat 연결, 복제 계정, dump·복원, binlog 복제, 전환·롤백 절차 유지
 
 ### 1. 접속 및 BE 설정
 
@@ -108,6 +150,9 @@ MIGRATION_DB_MIN_IDLE=2
 기존 `docker-compose.migration.yml`은 리허설과 운영 이관에 공통으로 사용하고, `docker-compose.rehearsal.yml`은 시험 환경 설정에만 사용한다.
 
 ```bash
+sudo docker compose --env-file /opt/app/shared/.env.shared \
+  -f docker-compose.yml -f loadtest/migration/docker-compose.rehearsal.yml \
+  -f docker-compose.migration.yml pull springboot
 sudo docker compose --env-file /opt/app/shared/.env.shared \
   -f docker-compose.yml -f loadtest/migration/docker-compose.rehearsal.yml \
   -f docker-compose.migration.yml up -d --no-deps --wait springboot
