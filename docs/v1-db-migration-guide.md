@@ -299,9 +299,7 @@ EC2 사설 IP의 3306 포트에 `socat`을 systemd 서비스로 열고, 서비�
    ```
 2. EC2에서 proxy 서비스를 만든다.
    ```bash
-   # Ubuntu EC2 기준
-   sudo apt-get update
-   sudo apt-get install -y socat
+   # socat 설치 후 진행('command -v socat', 'rpm -q socat || true'로 확인)
    sudo tee /usr/local/sbin/mysql-container-proxy.sh >/dev/null <<'SCRIPT'
    #!/usr/bin/env bash
    set -Eeuo pipefail
@@ -447,8 +445,10 @@ SHOW BINARY LOG STATUS;
    ```
 5. **[EC2 ubuntu → RDS]** RDS에 복원하고, 복원 성공 여부를 확인한다.
    ```bash
-   mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" \
-     < "$DUMP_FILE"
+   nohup sh -c '
+   mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" < "$DUMP_FILE"
+   ' > /tmp/rds-restore.log 2>&1 &
+   
    mysql --protocol=tcp -h "$RDS_HOST" -u "$RDS_USER" \
      -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}';"
    ```
