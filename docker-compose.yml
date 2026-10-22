@@ -77,9 +77,9 @@ services:
     restart: unless-stopped
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
-      - DB_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true
-      - DB_USERNAME=${MYSQL_USER}
-      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_URL=${DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true}
+      - DB_USERNAME=${DB_USERNAME:-${MYSQL_USER}}
+      - DB_PASSWORD=${DB_PASSWORD:-${MYSQL_PASSWORD}}
       - JWT_SECRET=${JWT_SECRET} # 32바이트 이상
       - CORS_ALLOWED_ORIGINS=https://bakkucca.com,https://www.bakkucca.com # CORS와 WebSocket 허용 Origin
       - AWS_S3_BUCKET=${AWS_S3_BUCKET}
@@ -137,6 +137,12 @@ services:
       - NODE_OPTIONS=--max-old-space-size=256
       - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      # 이벤트 Google Drive / Sheets 서버 설정
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - GOOGLE_OAUTH_REFRESH_TOKEN=${GOOGLE_OAUTH_REFRESH_TOKEN}
+      - GOOGLE_EVENT_SPREADSHEET_ID=${GOOGLE_EVENT_SPREADSHEET_ID}
+      - GOOGLE_EVENT_DRIVE_FOLDER_ID=${GOOGLE_EVENT_DRIVE_FOLDER_ID}
     deploy:
       resources:
         limits:
