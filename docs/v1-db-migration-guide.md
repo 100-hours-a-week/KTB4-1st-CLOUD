@@ -246,8 +246,22 @@ docker compose \
 sudo docker compose \
   -f /home/ubuntu/bakkucca/docker-compose.yml \
   -f /home/ubuntu/bakkucca/docker-compose.migration.yml \
-  up -d springboot
+  up -d --force-recreate mysql springboot
 ```
+
+migration override를 적용하지 않고 기존 MySQL 컨테이너를 재사용하면 384MiB 제한으로
+reverse replica 준비 중 OOM이 발생할 수 있다. 반드시 `--force-recreate mysql springboot`
+로 컨테이너를 재생성하고 다음 결과가 최소 768MiB인지 확인한다.
+
+```bash
+sudo docker inspect mysql --format 'memory_limit={{.HostConfig.Memory}}'
+# 805306368 이상이어야 한다.
+```
+
+이 검사는 RDS 복제나 트래픽 전환 이후가 아니라 migration 시작 전에 수행한다. 확인에
+실패하면 `prepare-drain`을 실행하지 않는다. 호스트 자체의 메모리가 부족하면 MySQL
+제한만 올려도 해결되지 않으므로 `free -h`, `docker stats --no-stream`, `dmesg -T |
+grep -i oom`으로 확인하고 필요하면 t4g.medium 이상 또는 swap을 준비한다.
 
 일반 운영 배포는 기존처럼 `docker-compose.yml`만 사용한다. migration override를 함께
 지정하지 않으면 Spring Boot는 migration 프로파일과 RDS DataSource를 사용하지 않는다.
@@ -558,9 +572,9 @@ SHOW BINARY LOG STATUS;
    ```bash
    docker exec "$WAS_ADMIN_CONTAINER" \
      wget -qO- -T 5 --post-data='' \
-     "${WAS_ADMIN_URL%/}/health?target=RDS"
+     "${WAS_ADMIN_URL%/}/health?target=EC2"
    ```
-   이 요청이 `404`, 연결 거부 또는 인증 오류이면 트래픽 전환을 실행하지 않는다. `health`는 아직 `commit`하지 않은 상태에서는 `409`를 반환할 수 있으므로, 이 경우 API가 존재하고 접근 가능한 것으로 보고 다음 단계로 진행한다. API가 없는 `404`와 연결 거부는 Spring Boot 레포의 배포 문제다.
+   이 요청이 API가 없는 `404`와 연결 거부는 Spring Boot의 배포 문제로, 트래픽 전환을 실행하지 않는다.
 
    실행 순서
    ```bash
