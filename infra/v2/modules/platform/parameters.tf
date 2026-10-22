@@ -5,7 +5,7 @@ locals {
       var.database_secret_arn == null ? ["DB_PASSWORD"] : [],
       ["JWT_SECRET", "KAKAO_CLIENT_SECRET", "PROMETHEUS_AUTH_PASSWORD", "CLOUDFRONT_PRIVATE_KEY_PEM", "SPRING_DATA_REDIS_PASSWORD"],
     )
-    fe = ["KAKAO_REST_API_KEY", "DISCORD_WEBHOOK_URL"]
+    fe = ["KAKAO_REST_API_KEY", "DISCORD_WEBHOOK_URL", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_OAUTH_REFRESH_TOKEN"]
     ai = ["ANTHROPIC_API_KEY"]
   }
   runtime_parameter_keys = {
@@ -17,7 +17,10 @@ locals {
       "AI_BASE_URL", "AI_IMAGE_ANALYSIS_URL", "AI_TEXT_MODERATION_URL", "AI_ITEM_PRICE_URL", "AI_SMART_SEARCH_URL",
       "CLOUDFRONT_BASE_URL", "CLOUDFRONT_KEY_PAIR_ID", "CLOUDFRONT_SIGNED_URL_DURATION_SECONDS",
     ], keys(var.redis_parameters), local.runtime_secure_parameter_keys.be)
-    fe = concat(["NODE_ENV", "PORT", "HOSTNAME", "NODE_OPTIONS", "BACKEND_API_BASE_URL", "TZ"], local.runtime_secure_parameter_keys.fe)
+    fe = concat([
+      "NODE_ENV", "PORT", "HOSTNAME", "NODE_OPTIONS", "BACKEND_API_BASE_URL", "TZ",
+      "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_EVENT_SPREADSHEET_ID", "GOOGLE_EVENT_DRIVE_FOLDER_ID",
+    ], local.runtime_secure_parameter_keys.fe)
     ai = concat(["TZ"], local.runtime_secure_parameter_keys.ai)
   }
   runtime_parameter_names = {
