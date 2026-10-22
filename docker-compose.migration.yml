@@ -1,4 +1,16 @@
 services:
+  mysql:
+    command:
+      - --innodb-buffer-pool-size=256M
+      - --performance-schema=OFF
+      - --max-connections=50
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
   springboot:
     environment:
       SPRING_PROFILES_ACTIVE: migration

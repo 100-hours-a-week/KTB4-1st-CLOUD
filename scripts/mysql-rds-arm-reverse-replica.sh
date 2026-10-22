@@ -48,4 +48,13 @@ for _ in $(seq 1 30); do
   fi
   sleep 2
 done
-die "EC2 reverse replica did not become healthy"
+status="$(source_mysql -e 'SHOW REPLICA STATUS\G' || true)"
+io_error="$(replica_field "$status" Last_IO_Error)"
+sql_error="$(replica_field "$status" Last_SQL_Error)"
+if [[ -n "$io_error" ]]; then
+  die "EC2 reverse replica did not become healthy; IO error: $io_error"
+fi
+if [[ -n "$sql_error" ]]; then
+  die "EC2 reverse replica did not become healthy; SQL error: $sql_error"
+fi
+die "EC2 reverse replica did not become healthy; IO=$(replica_field "$status" Replica_IO_Running), SQL=$(replica_field "$status" Replica_SQL_Running)"
