@@ -140,7 +140,19 @@ resource "aws_instance" "data" {
       mountpoint -q "/srv/bakkucca/$data_name" || mount "/srv/bakkucca/$data_name"
     done
 
-    chown 1000:1000 /srv/bakkucca/kafka
+    # ext4 최상위의 lost+found를 Kafka 로그 디렉터리에서 제외한다.
+    kafka_root=/srv/bakkucca/kafka
+    install -d "$kafka_root/data"
+    # 기존 볼륨을 재사용할 때 토픽과 KRaft 메타데이터를 함께 보존한다.
+    if [ -f "$kafka_root/meta.properties" ]; then
+      if [ -n "$(find "$kafka_root/data" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        echo "Kafka data exists in both volume root and data directory; refusing to merge" >&2
+        exit 1
+      fi
+      find "$kafka_root" -mindepth 1 -maxdepth 1 ! -name lost+found ! -name data \
+        -exec mv -t "$kafka_root/data" -- {} +
+    fi
+    chown -R 1000:1000 "$kafka_root/data"
 
     cat > /opt/bakkucca-data/start.py <<'PYTHON'
     import json
@@ -209,7 +221,7 @@ resource "aws_instance" "data" {
                 "KAFKA_NUM_NETWORK_THREADS": "2", "KAFKA_NUM_IO_THREADS": "2",
                 "KAFKA_LOG_RETENTION_HOURS": "24", "KAFKA_LOG_RETENTION_BYTES": "536870912",
                 "KAFKA_LOG_SEGMENT_BYTES": "134217728"},
-            "volumes": ["/srv/bakkucca/kafka:/var/lib/kafka/data"], "logging": logging,
+            "volumes": ["/srv/bakkucca/kafka/data:/var/lib/kafka/data"], "logging": logging,
             "healthcheck": {"test": ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list"], "interval": "30s", "timeout": "15s", "retries": 10, "start_period": "60s"}}
 
     }}
