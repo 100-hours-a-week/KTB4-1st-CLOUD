@@ -22,7 +22,9 @@ terraform.rc
 
 # Secrets
 .env
+.env.*
 !.env.example
+!.env.*.example
 
 # Load tests
 loadtest/**/target/certs/
