@@ -30,5 +30,7 @@ terraform.rc
 loadtest/**/target/certs/
 loadtest/migration/certs/
 loadtest/migration/results/
+loadtest/cutover/results/
+/results/
 loadtest/**/runner/results/
 loadtest/**/attack/nginx/jwt.secret
