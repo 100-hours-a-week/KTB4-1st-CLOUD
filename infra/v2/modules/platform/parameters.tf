@@ -20,6 +20,7 @@ locals {
     fe = concat([
       "NODE_ENV", "PORT", "HOSTNAME", "NODE_OPTIONS", "BACKEND_API_BASE_URL", "TZ",
       "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_EVENT_SPREADSHEET_ID", "GOOGLE_EVENT_DRIVE_FOLDER_ID",
+      "GOOGLE_EVENT_SHEET_NAME",
     ], local.runtime_secure_parameter_keys.fe)
     ai = concat(["TZ"], local.runtime_secure_parameter_keys.ai)
   }
