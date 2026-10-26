@@ -24,11 +24,6 @@ locals {
     }
   }
 
-  # 최초 이미지 digest가 입력된 서비스만 실행 대상으로 선택
-  active_services = {
-    for name, service in local.services : name => service
-    if contains(keys(var.initial_image_digests), name)
-  }
   # 서비스마다 blue와 green 대상 그룹 설정 생성
   target_groups = merge([
     for name, service in local.services : {

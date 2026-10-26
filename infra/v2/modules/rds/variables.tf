@@ -1,6 +1,10 @@
 variable "environment" { type = string }
 variable "vpc_id" { type = string }
-variable "backend_security_group_id" { type = string }
+variable "backend_security_group_id" {
+  type     = string
+  default  = null
+  nullable = true
+}
 variable "rds_database_name" {
   type    = string
   default = "market"

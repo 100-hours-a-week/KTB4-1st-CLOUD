@@ -8,7 +8,7 @@ resource "aws_codedeploy_app" "app" {
 
 # 서비스별 블루그린 배포와 실패 시 롤백 설정
 resource "aws_codedeploy_deployment_group" "app" {
-  for_each = local.active_services
+  for_each = local.services
 
   app_name               = aws_codedeploy_app.app[each.key].name
   deployment_group_name  = "${local.name_prefix}-${each.key}"

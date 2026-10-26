@@ -189,7 +189,7 @@ resource "aws_s3_bucket_policy" "fe_static" {
 
 # 개발과 스테이징의 서비스 도메인을 CloudFront에 연결
 resource "aws_route53_record" "web" {
-  for_each = var.environment == "prod" ? toset([]) : toset(["A", "AAAA"])
+  for_each = var.environment == "prod" || !var.publish_service_dns ? toset([]) : toset(["A", "AAAA"])
   zone_id  = data.aws_route53_zone.public.zone_id
   name     = local.domain_name
   type     = each.key

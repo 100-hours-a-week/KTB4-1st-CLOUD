@@ -12,6 +12,7 @@ resource "aws_security_group" "rds_mysql" {
   vpc_id      = var.vpc_id
 }
 resource "aws_vpc_security_group_ingress_rule" "backend" {
+  count                        = var.backend_security_group_id == null ? 0 : 1
   security_group_id            = aws_security_group.rds_mysql.id
   referenced_security_group_id = var.backend_security_group_id
   ip_protocol                  = "tcp"
@@ -19,11 +20,23 @@ resource "aws_vpc_security_group_ingress_rule" "backend" {
   to_port                      = 3306
 }
 resource "aws_vpc_security_group_egress_rule" "backend" {
+  count                        = var.backend_security_group_id == null ? 0 : 1
   security_group_id            = var.backend_security_group_id
   referenced_security_group_id = aws_security_group.rds_mysql.id
   ip_protocol                  = "tcp"
   from_port                    = 3306
   to_port                      = 3306
+}
+
+# Keep the existing rule instances stable in prod while allowing migration-only RDS without an app SG.
+moved {
+  from = aws_vpc_security_group_ingress_rule.backend
+  to   = aws_vpc_security_group_ingress_rule.backend[0]
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.backend
+  to   = aws_vpc_security_group_egress_rule.backend[0]
 }
 resource "aws_db_subnet_group" "mysql" {
   name        = "${local.name_prefix}-mysql"

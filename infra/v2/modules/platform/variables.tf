@@ -65,3 +65,8 @@ variable "database_secret_arn" {
   type        = string
   default     = null
 }
+
+variable "publish_service_dns" {
+  type    = bool
+  default = true
+}

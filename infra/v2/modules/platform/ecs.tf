@@ -39,7 +39,7 @@ resource "aws_ecs_cluster_capacity_providers" "app" {
 
 # 환경별 태스크 수와 CodeDeploy 배포 적용
 resource "aws_ecs_service" "app" {
-  for_each = local.active_services
+  for_each = local.services
 
   name                              = "${local.name_prefix}-${each.key}"
   cluster                           = aws_ecs_cluster.app[each.key].id

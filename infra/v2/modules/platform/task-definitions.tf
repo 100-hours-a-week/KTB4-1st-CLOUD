@@ -1,20 +1,18 @@
 # task-definition.tf: 서비스별 템플릿을 읽고 값을 채운 뒤 AWS에 태스크 정의로 등록
 # 최초 서비스 생성에 사용할 이미지 입력
 variable "initial_image_digests" {
-  description = "개발은 latest 태그, 운영과 스테이징은 digest로 고정한 ARM64 이미지"
+  description = "ARM64 이미지 참조. digest 또는 시맨틱 태그를 사용하며 dev만 latest 허용"
   type        = map(string)
-  default     = {}
   nullable    = false
 
   validation {
-    condition = alltrue([
-      for name, image in var.initial_image_digests :
-      contains(["be", "fe", "ai"], name) && (
-        can(regex("^[^[:space:]@]+/[^[:space:]@]+@sha256:[0-9a-f]{64}$", image)) ||
-        (var.environment == "dev" && can(regex("^[^[:space:]@]+/[^[:space:]@:]+:latest$", image)))
-      )
+    condition = toset(keys(var.initial_image_digests)) == toset(["be", "fe", "ai"]) && alltrue([
+      for image in values(var.initial_image_digests) :
+      can(regex("^[^[:space:]@]+/[^[:space:]@]+@sha256:[0-9a-f]{64}$", image)) ||
+      can(regex("^[^[:space:]@]+/[^[:space:]@:]+:v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", image)) ||
+      (var.environment == "dev" && can(regex("^[^[:space:]@]+/[^[:space:]@:]+:latest$", image)))
     ])
-    error_message = "be, fe, ai의 이미지 digest를 입력해야 하며 dev만 latest 태그 사용 가능"
+    error_message = "be, fe, ai 모두의 초기 이미지 참조가 필요하며 dev만 latest 사용 가능"
   }
 }
 
@@ -28,7 +26,7 @@ locals {
   task_definition_templates = {
     for name in keys(local.services) : name => templatefile("${path.module}/${name}-task-definition.json.tftpl", {
       family              = "${local.name_prefix}-${name}"
-      image               = lookup(var.initial_image_digests, name, "__IMAGE_DIGEST__")
+      image               = var.initial_image_digests[name]
       task_role_arn       = aws_iam_role.task[name].arn
       execution_role_arn  = aws_iam_role.execution[name].arn
       registry_secret_arn = data.aws_secretsmanager_secret.ghcr.arn
@@ -46,7 +44,7 @@ locals {
 
 # 최초 태스크 정의를 등록하고 생성한 리비전 ARN을 ECS 서비스에 전달
 resource "aws_ecs_task_definition" "app" {
-  for_each = local.active_services
+  for_each = local.services
 
   family                   = "${local.name_prefix}-${each.key}"
   network_mode             = "bridge"
