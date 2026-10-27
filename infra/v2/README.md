@@ -162,3 +162,69 @@ terraform -chdir=infra/v2/environments/prod output cloudfront
 - CloudFront 공개키·개인키는 BE SSM에서 관리하며 개인키를 Git에 저장하지 않음
 
 </details>
+
+
+<details>
+<summary>새 환경 최초 구축 시 준비 순서</summary>
+
+1. 환경 폴더에서 `terraform init`, 최초 ARM64 이미지 참조와 AWS 권한 확인
+2. 일반 설정은 SSM `String`, 앱 비밀값은 `SecureString`으로 등록
+3. 이미지 서명 공개키와 개인키 등록, 개발은 DB 이름과 계정 및 root 비밀번호 준비
+4. DB 데이터 이관 여부와 최초 BE 기동의 쓰기 동작을 확인한 뒤 plan 검토
+5. 검토한 계획 적용, 개발 데이터 컨테이너와 ECS 헬스 체크 확인
+6. FE와 동일한 빌드의 정적 파일 업로드 후 기능 검증
+7. 서비스별 GitHub Environment에 OIDC 역할과 FE 정적 버킷 및 CloudFront ID 등록
+
+- prod 최초 이미지는 `main.tf`의 digest, dev는 서비스별 `latest` 기본값 사용
+- `latest` 갱신만으로 실행 중인 태스크가 교체되지는 않음
+- staging도 앱 구축 단계 포함. 초기 이미지는 `initial_image_digests`로 지정하고 FE는 staging 주소로 빌드
+- 서비스 도메인 전환은 별도 작업, 기존 운영 환경 재적용과 신규 구축을 구분
+
+</details>
+
+
+<details>
+<summary>CloudFront 이미지 서명 키와 적용 순서</summary>
+
+설정값:
+
+| 값 | AWS 저장 위치 | 관리 |
+|---|---|---|
+| `CLOUDFRONT_BASE_URL` | BE용 SSM | Terraform이 `https://bakkucca.com` 등록 |
+| `CLOUDFRONT_KEY_PAIR_ID` | BE용 SSM | Terraform이 CloudFront 공개키 ID 등록 |
+| `CLOUDFRONT_SIGNED_URL_DURATION_SECONDS` | BE용 SSM | AWS에서 입력, 기존 유효 시간을 유지하려면 `3600` 사용 |
+| `CLOUDFRONT_PRIVATE_KEY_PEM` | `/bakkucca-v2-<환경>/be/CLOUDFRONT_PRIVATE_KEY_PEM` SSM `SecureString` | 개인키 PEM 저장 |
+| `CLOUDFRONT_PUBLIC_KEY_PEM` | `/bakkucca-v2-<환경>/be/CLOUDFRONT_PUBLIC_KEY_PEM` SSM `String` | Terraform이 조회해 CloudFront에 등록, BE에는 주입하지 않음 |
+
+적용 순서:
+
+1. RSA 2048 키 생성, 기존 키가 있으면 재사용
+2. 공개키는 SSM `String`, 개인키는 `SecureString`으로 저장하고 URL 유효 시간과 다른 런타임 설정을 입력한 뒤 전체 인프라 적용
+3. BE팀의 CloudFront signed URL 발급 구현 후 새 이미지와 태스크 정의로 배포
+4. 정상 조회와 캐시 응답, 서명 누락과 만료 및 변조의 403 확인
+
+- 공개키는 Terraform이 SSM에서 조회, 로컬 입력 변수 불필요
+- 기존 국내 접근 제한 유지, AI 분석용 S3 GET은 해당 제한과 구분
+- 키 생성과 적용 명령은 CLOUD `infra/v2/README.md` 참고
+
+</details>
+
+
+### Valkey 인증 변경
+
+- 비밀번호 변경: SSM 값 변경 → `password_version` 증가 후 apply → BE 재배포
+
+
+### 개발 데이터 교체 시 데이터 보존
+
+- 데이터 EC2 교체 전 쓰기 중단, 컨테이너 정상 종료, 볼륨 백업, 주소 변경 후 BE 재배포
+- 기존 MySQL 데이터의 계정 비밀번호는 초기화 환경변수 변경만으로 바뀌지 않음
+- Kafka 메시지와 소비자 오프셋은 다른 브로커로 자동 복사되지 않으므로 교체 전 보존, 이전 여부 결정
+
+
+### FE 정적 파일 배포 순서
+
+- `.next/static` 내용물은 S3의 `_next/static/`, `public` 내용물은 S3 버킷 루트로 업로드
+- 예시: `public/icons/logo.svg` → S3 `icons/logo.svg` → 요청 URL `/icons/logo.svg`
+- 정적 파일 업로드 완료 후 해당 FE 컨테이너 배포
+- 이전 버전 JS와 CSS 유지, 같은 URL의 파일 교체 시 캐시 무효화 연결
