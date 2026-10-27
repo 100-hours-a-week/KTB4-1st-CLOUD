@@ -2,7 +2,7 @@
 
 - 목적: v1 EC2 → v2 ECS 전환·롤백 중 요청 처리·데이터 저장·채팅 복구 확인
 - 준비 조건: 시험용 v2 ECS·ALB·Valkey·Kafka와 v1 EC2
-- staging DB 전용 Terraform만 적용해서는 실행할 수 없음
+- staging 앱 자원 재구축과 헬스 체크 완료 후 실행
 - DB 복제·이관 스크립트와 DB 마이그레이션 복제본은 변경하지 않음
 
 | 구분 | 내용 |

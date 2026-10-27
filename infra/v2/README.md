@@ -2,7 +2,7 @@
 
 - 운영·개발: 두 AZ의 ECS on EC2, 서비스별 ASG·Capacity Provider, ALB·CloudFront
 - 운영 데이터: RDS MySQL과 Serverless Valkey, 별도 Kafka EC2
-- 스테이징: DB 시험용 네트워크·RDS·v1 피어링
+- 스테이징: prod와 같은 앱·네트워크·RDS·Valkey·Kafka·배포 구성. AWS 자원은 시험 시 재구축
 - 운영 DNS: 수동 관리. 서비스 DNS 전환과 CloudFront 원본 변경은 별도 작업
 
 ## 환경과 실행 위치
@@ -11,12 +11,12 @@
 |---|---|---|---|
 | 운영 | `infra/v2/environments/prod` | `v2/prod/terraform.tfstate` | 앱·RDS·Valkey·Kafka |
 | 개발 | `infra/v2/environments/dev` | `v2/dev/terraform.tfstate` | 앱·MySQL/Valkey/Kafka 데이터 EC2 |
-| 스테이징 | `infra/v2/environments/staging` | `v2/staging/terraform.tfstate` | VPC·private subnet·RDS·v1 통신 경로 |
+| 스테이징 | `infra/v2/environments/staging` | `v2/staging/terraform.tfstate` | 운영과 같은 앱·RDS·Valkey·Kafka, 시험용 v1 연결 |
 
 - `infra/v2` 루트는 실행 폴더가 아님
 - 운영 VPC `10.20.0.0/16`, 개발 `10.40.0.0/16`, 스테이징 `10.30.0.0/16`
-- staging에는 ECS·ALB·Kafka·Valkey·배포 역할을 구성하지 않음
-- staging의 기존 CloudFront·S3는 AWS에 보존하며 staging state에서 분리
+- staging은 prod와 같은 platform·RDS·Valkey 모듈과 서비스 용량 기본값 사용
+- staging AWS에는 DB 네트워크·RDS만 유지. 재구축 전 [staging 준비](environments/staging/README.md) 확인
 - DB 복제·데이터 이관·DB 롤백과 복제 EC2 설정은 DB 담당자 관리
 
 ## 파일 구성
@@ -28,12 +28,11 @@
 | `environments/dev/data.tf` | 개발 데이터 EC2·볼륨·컨테이너 |
 | `environments/{prod,staging}/rds.tf` | RDS 사양과 접속 설정 |
 | `environments/{prod,staging}/migration.tf` | v1 피어링·RDS 통신 경로와 SG |
-| `environments/staging/moved.tf` | 네트워크 리소스의 state 주소 이전 |
-| `environments/staging/retained.tf` | CloudFront·S3 등을 삭제하지 않고 state에서 분리 |
+| `environments/staging/moved.tf` | 보존된 DB 네트워크를 platform 주소로 이전 |
 | `modules/platform` | 앱 네트워크·ECS·ASG·ALB·CloudFront·IAM·SSM·CodeDeploy·Kafka |
 | `modules/rds` | RDS·subnet group·SG |
 | `modules/serverless-valkey` | 운영 Serverless Valkey |
-| `modules/migration-network` | staging VPC·private DB subnet·route table |
+| `modules/migration-network` | DB 네트워크 분리용 모듈, staging 복원 시 platform으로 인계 |
 
 ## DNS와 요청 경로
 
@@ -42,7 +41,7 @@
 | 운영 서비스 도메인 | 수동 DNS 설정 유지. prod는 서비스 A/AAAA를 생성하지 않음 |
 | `publish_service_dns` | 개발 등 비운영 환경의 서비스 A/AAAA 생성 제어. prod에는 적용되지 않음 |
 | `origin.<도메인>`·인증서 검증 레코드 | platform 모듈에서 관리 |
-| staging 서비스 DNS·CloudFront | staging state 밖에서 관리 |
+| staging 서비스 DNS·CloudFront | 서비스 DNS는 기본 미등록. 기존 CloudFront는 재구축 전 state 소유권 확인 |
 | 기존 v1 DNS 코드 | 루트 도메인 A를 v1 EIP로 정의. 적용 전 실제 DNS와 대조 |
 
 - DNS: 도메인이 연결되는 CloudFront 또는 서버 결정
@@ -111,7 +110,7 @@ terraform -chdir=infra/v2/environments/prod output cloudfront
 |---|---|---|---|
 | 개발 | 각 서비스 저장소 | `dev` | dev push 또는 수동 digest |
 | 운영 | 각 서비스 저장소 | `prod` | 정식 `vMAJOR.MINOR.PATCH` 태그 또는 수동 version |
-| 스테이징 | CLOUD에 기존 파일 보존 | `staging` | 앱·배포 역할 준비 전 사용 불가 |
+| 스테이징 | CLOUD의 서비스별 staging workflow | `staging` | 정식 릴리즈 version, 앱·배포 역할 재구축 후 실행 |
 
 <details>
 <summary>배포 설정과 동작</summary>

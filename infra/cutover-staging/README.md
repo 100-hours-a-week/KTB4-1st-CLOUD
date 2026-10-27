@@ -2,7 +2,7 @@
 
 - 목적: 별도 v1 EC2에서 v2 ECS로 요청 원본 전환·롤백 시험
 - 선행 조건: 시험용 v2 ECS·ALB·Kafka·Valkey 준비
-- staging Terraform은 DB 전용 구성으로, 이 시험의 앱·캐시·Kafka를 생성하지 않음
+- v2 시험 자원은 `infra/v2/environments/staging`으로 재구축. 기존 RDS·DNS·CloudFront는 준비 절차에 따라 보존
 - DB 복제본·데이터 이관·DB 롤백은 DB 담당자 관리
 
 | 구분 | 내용 |
@@ -162,7 +162,7 @@ sudo docker ps --format 'table {{.Names}}\t{{.Status}}'
 ```
 
 - 시험 중 DNS·CloudFront·앱 인프라 변경은 전환 실행자가 관리
-- staging DB 전용 root는 시험 CloudFront를 관리하지 않음. 다른 root의 적용은 plan에서 원본·DNS 변경 확인
+- staging 재구축 전 기존 CloudFront의 state 소유권 확인. 적용 plan에서 원본·DNS 변경 대조
 - `publish_service_dns=false`: Terraform의 서비스 DNS 생성 보류용 — CloudFront 원본 보호 기능 아님
 - Kafka 확인: SSM 주소 주입, TCP 연결, consumer group 참여 / 파티션 할당 — 실제 발행 / 소비와는 별도 검증
 

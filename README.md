@@ -24,7 +24,7 @@ infra/
 ├── v2/
 │   ├── environments/prod/  # 운영 앱·RDS·Valkey
 │   ├── environments/dev/   # 개발 앱·데이터 EC2
-│   ├── environments/staging/ # DB 시험용 네트워크·RDS
+│   ├── environments/staging/ # prod 동등 구성의 전환 시험 환경
 │   └── modules/            # 공통 인프라 모듈
 ├── cutover-staging/        # 인프라 전환용 v1 EC2
 └── migration-staging/      # DB 담당자 관리

@@ -51,9 +51,9 @@ variable "rds_apply_immediately" {
 module "rds" {
   source                       = "../../modules/rds"
   environment                  = "staging"
-  vpc_id                       = module.migration_network.vpc_id
-  rds_subnet_ids               = values(module.migration_network.private_subnet_ids)
-  backend_security_group_id    = null
+  vpc_id                       = module.platform.vpc_id
+  rds_subnet_ids               = values(module.platform.private_subnet_ids)
+  backend_security_group_id    = module.platform.backend_security_group_id
   rds_database_name            = var.rds_database_name
   rds_master_username          = var.rds_master_username
   rds_instance_class           = var.rds_instance_class
