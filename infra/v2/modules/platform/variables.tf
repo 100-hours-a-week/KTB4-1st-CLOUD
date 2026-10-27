@@ -24,7 +24,24 @@ variable "private_subnets" {
   default = {}
 }
 
-# 운영과 스테이징의 공통 용량을 기본값으로 사용
+# 서비스별 EC2 사양과 컨테이너 메모리 상한
+variable "service_compute" {
+  type = map(object({ instance_type = string, memory = number }))
+  default = {
+    be = { instance_type = "t4g.small", memory = 1536 }
+    fe = { instance_type = "t4g.small", memory = 1536 }
+    ai = { instance_type = "t4g.small", memory = 1536 }
+  }
+  validation {
+    condition = toset(keys(var.service_compute)) == toset(["be", "fe", "ai"]) && alltrue([
+      for service, compute in var.service_compute :
+      trimspace(compute.instance_type) != "" && compute.memory > lookup({ be = 512, fe = 256, ai = 512 }, service, 0) && floor(compute.memory) == compute.memory
+    ])
+    error_message = "be, fe, ai의 EC2 타입과 메모리 예약값(BE·AI 512MiB, FE 256MiB)보다 큰 정수 메모리 상한이 필요함"
+  }
+}
+
+# 운영의 공통 용량을 기본값으로 사용
 variable "service_capacity" {
   type = map(object({ desired = number, min = number, max = number }))
   default = {

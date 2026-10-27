@@ -68,6 +68,11 @@ module "platform" {
     ap-northeast-2c = "10.40.1.0/24"
   }
   initial_image_digests = var.initial_image_digests
+  service_compute = {
+    be = { instance_type = "t4g.micro", memory = 640 }
+    fe = { instance_type = "t4g.micro", memory = 512 }
+    ai = { instance_type = "t4g.small", memory = 1536 }
+  }
   service_capacity = {
     be = { desired = 1, min = 1, max = 2 }
     fe = { desired = 1, min = 1, max = 2 }

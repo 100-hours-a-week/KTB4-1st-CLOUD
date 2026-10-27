@@ -10,7 +10,7 @@ resource "aws_launch_template" "app" {
 
   name_prefix   = "${local.name_prefix}-${each.key}-"
   image_id      = data.aws_ssm_parameter.ecs_ami.value
-  instance_type = "t4g.small"
+  instance_type = var.service_compute[each.key].instance_type
 
   iam_instance_profile {
     arn = aws_iam_instance_profile.app[each.key].arn

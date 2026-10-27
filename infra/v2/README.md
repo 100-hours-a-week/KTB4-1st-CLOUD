@@ -147,7 +147,13 @@ terraform -chdir=infra/v2/environments/prod output cloudfront
 
 - 운영 ASG: 서비스별 평시 2대·배포 최대 4대, 인스턴스당 태스크 1개
 - 개발 ASG: 서비스별 평시 1대·배포 최대 2대
-- 앱: ARM64 `t4g.small`, bridge 네트워크, 대상 그룹 유형 `instance`
+- 앱: ARM64, bridge 네트워크, 대상 그룹 유형 `instance`
+- 운영 앱: 서비스별 `t4g.small`, 컨테이너 메모리 상한 1536MiB
+- 개발 앱: BE·FE는 `t4g.micro`, AI는 `t4g.small`. 컨테이너 메모리 상한은 BE 640MiB·FE 512MiB·AI 1536MiB
+- 사양은 `service_compute`로 설정하며 개발 데이터 EC2의 사양은 별도 관리
+- 개발 BE의 SSM `JAVA_TOOL_OPTIONS`는 `-Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m` 사용. 힙 이외의 JVM 메모리도 컨테이너 상한에 포함
+- 개발 FE의 SSM `NODE_OPTIONS`는 `--max-old-space-size=256` 사용. V8 힙 이외의 Node.js 메모리도 컨테이너 상한에 포함
+- Launch Template 적용만으로 기존 EC2가 교체되지는 않음. 새 태스크 정의 등록 후 서비스 배포로 신규 용량·ALB 상태를 확인하고 기존 EC2를 드레이닝·교체해야 사양 축소 완료
 - readiness: BE `/actuator/health/readiness`, FE `/api/health/readiness`, AI `/health/readiness`
 - 운영 Valkey 암호: SSM 값 변경 → `password_version` 증가·apply → BE 재배포
 - 개발 데이터 EC2: SSM Session Manager, `/opt/bakkucca-data/compose.json`, systemd `bakkucca-data`
