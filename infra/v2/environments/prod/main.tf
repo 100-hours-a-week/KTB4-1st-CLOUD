@@ -85,11 +85,10 @@ module "platform" {
   initial_image_digests        = local.initial_images
   existing_uploads_bucket_name = "bakkucca-uploads"
   redis_parameters             = module.valkey.redis_parameters
-  # ARN은 비밀번호 값이 아니므로 태스크 정의에 참조만 전달
-  database_secret_arn = nonsensitive(module.rds.master_secret_arn)
+  # DB_PASSWORD는 SSM SecureString 경로에서 주입
   managed_parameters = {
     "be/DB_URL"      = "${module.rds.jdbc_url}?sslMode=REQUIRED"
-    "be/DB_USERNAME" = var.rds_master_username
+    "be/DB_USERNAME" = "bakkucca_be"
   }
 }
 
