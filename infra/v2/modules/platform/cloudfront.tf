@@ -155,11 +155,9 @@ resource "aws_cloudfront_distribution" "web" {
       error_caching_min_ttl = 0 # 오류 응답의 강제 캐시 시간 제거 (서비스 복구 시 실시간으로 반영하기 위함)
     }
   }
-  # 국내 전용 설정
   restrictions {
     geo_restriction {
-      restriction_type = "whitelist"
-      locations        = ["KR"]
+      restriction_type = "none"
     }
   }
   # 브라우저-cloudfront 간 https 설정
