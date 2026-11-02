@@ -1,3 +1,8 @@
+# MySQL 채팅 데이터 -> MongoDB Atlas 무중단 분리
+
+이 절차는 MySQL의 채팅 데이터를 MongoDB Atlas로 옮기는 별도 마이그레이션이다.<br>
+MySQL→RDS 전환과 동시에 수행하지 않는다.<br>
+Atlas로 읽기를 전환한 뒤에도 MySQL 원본과 변경 이력을 rollback window 동안 보존한다.
 
 ## 전체 시스템 아키텍처 개요
 ```
@@ -65,3 +70,4 @@ Peering 연결 자체는 무료지만 전체 데이터 전송이 무료인 것�
 4. Read 컷오버| 설정 플래그 변경(readFromMongo: true).<br>Circuit Breaker 활성 상태로 읽기 진입.          |읽기: Mongo 우선 시도(지연/장애 시 즉시 MySQL Fallback)|최대 300~500ms 방어|
 5. Write 컷오버| Primary 쓰기를 MongoDB로 전환.<br>(필요 시 Mongo to MySQL 역방향 복제 임시 유지).           |쓰기: MongoDB 직접 적재읽기: MongoDB 서빙|지연 영향 없음|
 6. 레거시 정리 (Flyway)| 마이그레이션 안정화 후 Flyway로 chat_messages 및 chat_outbox_events 테이블 제거.           | Flyway DROP TABLE 실행|애플리케이션 영향 없음|
+

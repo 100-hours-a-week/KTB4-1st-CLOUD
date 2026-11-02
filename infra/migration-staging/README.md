@@ -238,7 +238,7 @@ export DUMP_FILE="/tmp/mysql-migration-${MYSQL_DATABASE}.sql"
 
 ### 7.2 데이터 복사와 복제
 
-- 공통 명령: [DB 마이그레이션 가이드](../../docs/v1-db-migration-guide.md)의 「무중단 이관」 2~7번
+- 공통 명령: [DB 마이그레이션 가이드](../../docs/db-migration-rds-mysql/rds-migration-guide.md)의 「무중단 이관」 2~7번
 - 같은 Bash 세션에서 7.1절 변수를 사용
 - 데이터 복사와 복제 완료 후 이 문서의 8절 진행
 
@@ -353,7 +353,7 @@ run_migration scripts/mysql-rds-rollback.sh
 - 롤백 후 EC2 쓰기가 RDS에 자동 복제된다고 가정하지 않음
 - 역방향 복제 지연 또는 오류, RDS 연결 실패 시 강제 전환 금지
 - MySQL 컨테이너와 데이터 볼륨, migration 상태는 결과 확인 전 삭제 금지
-- 상세 DB 복구와 정리 절차: [DB 마이그레이션 가이드](../../docs/v1-db-migration-guide.md)
+- 상세 DB 복구와 정리 절차: [DB 마이그레이션 가이드](../../docs/db-migration-rds-mysql/rds-migration-guide.md)
 - 이 문서의 DB 롤백과 v2 ECS → v1 인프라 롤백은 별도 작업
 
 ## 10. 코드 자체 검증

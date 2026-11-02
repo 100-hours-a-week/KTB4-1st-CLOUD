@@ -1,5 +1,5 @@
 
-## 무중단 EC2 MySQL -> RDS MySQL 마이그레이션 결과 보고서
+## EC2 MySQL -> RDS MySQL 마이그레이션 결과 보고서
 
 ### 1. 마이그레이션 개요 및 컷오버(Cut-over) 실행 기록
 
