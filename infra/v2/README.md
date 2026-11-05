@@ -120,7 +120,7 @@ terraform -chdir=infra/v2/environments/prod output cloudfront
 - FE Variables: `FE_STATIC_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID` (`terraform output cloudfront`)
 - FE 빌드 Secret: 개발 `FE_ENV_DEV`, 운영 `FE_ENV`
 - 운영 릴리즈 태그의 커밋은 서비스 main에 포함
-- 운영 이미지 태그: BE `v1.2.3`, FE·AI `1.2.3`
+- 운영 Git 태그는 `v1.2.3`, 이미지 태그는 BE·FE·AI 모두 `1.2.3`, `latest`는 개발 이미지에만 사용
 - FE 정적 파일 업로드 → 태스크 등록 → 헬스 체크 → CodeDeploy 트래픽 전환
 - 배포 방식: `CodeDeployDefault.ECSAllAtOnce`
 - 구버전 태스크 보존: 개발 1분, 운영 10분

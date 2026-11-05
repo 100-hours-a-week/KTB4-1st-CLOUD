@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       backend_tag:
-        description: "BE 이미지 태그 (예: v1.0.2)"
+        description: "BE 이미지 태그 (예: 2.0.4)"
         required: true
         type: string
       ai_tag:
