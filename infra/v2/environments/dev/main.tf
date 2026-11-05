@@ -146,10 +146,10 @@ resource "aws_iam_role_policy" "github_deploy" {
     Statement = [
       {
         Effect = "Allow"
-        Action = concat(
-          ["ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition", "autoscaling:DescribeAutoScalingGroups"],
-          each.key == "be" ? ["codedeploy:GetDeploymentTarget"] : [],
-        )
+        Action = [
+          "ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition", "autoscaling:DescribeAutoScalingGroups",
+          "codedeploy:GetDeploymentTarget",
+        ]
         Resource = "*"
       },
       {
@@ -177,12 +177,11 @@ resource "aws_iam_role_policy" "github_deploy" {
       },
       {
         Effect = "Allow"
-        Action = concat([
+        Action = [
           "codedeploy:GetDeploymentGroup", "codedeploy:CreateDeployment",
           "codedeploy:GetDeployment", "codedeploy:GetApplicationRevision", "codedeploy:RegisterApplicationRevision",
-          ], each.key == "be" ? [
           "codedeploy:StopDeployment",
-        ] : [])
+        ]
         Resource = [
           "${local.deploy_arn_prefix}:application:bakkucca-v2-dev-${each.key}",
           "${local.deploy_arn_prefix}:deploymentgroup:bakkucca-v2-dev-${each.key}/bakkucca-v2-dev-${each.key}",
