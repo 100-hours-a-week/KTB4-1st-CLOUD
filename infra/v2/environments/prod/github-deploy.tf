@@ -51,8 +51,11 @@ resource "aws_iam_role_policy" "github_deploy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition", "autoscaling:DescribeAutoScalingGroups"]
+        Effect = "Allow"
+        Action = [
+          "ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition", "autoscaling:DescribeAutoScalingGroups",
+          "codedeploy:GetDeploymentTarget",
+        ]
         Resource = "*"
       },
       {
@@ -83,6 +86,7 @@ resource "aws_iam_role_policy" "github_deploy" {
         Action = [
           "codedeploy:GetDeploymentGroup", "codedeploy:CreateDeployment",
           "codedeploy:GetDeployment", "codedeploy:GetApplicationRevision", "codedeploy:RegisterApplicationRevision",
+          "codedeploy:StopDeployment",
         ]
         Resource = [
           "${local.deploy_arn_prefix}:application:bakkucca-v2-prod-${each.key}",
