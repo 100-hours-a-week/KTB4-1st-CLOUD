@@ -53,6 +53,61 @@ variable "initial_image_digests" {
   }
 }
 
+variable "password_version" {
+  type    = number
+  default = 1
+}
+
+variable "rds_database_name" {
+  type    = string
+  default = "market"
+}
+
+variable "rds_master_username" {
+  type    = string
+  default = "admin"
+}
+
+variable "rds_instance_class" {
+  type    = string
+  default = "db.t4g.small"
+}
+
+variable "rds_allocated_storage_gb" {
+  type    = number
+  default = 100
+}
+
+variable "rds_max_allocated_storage_gb" {
+  type    = number
+  default = 500
+}
+
+variable "rds_backup_retention_days" {
+  type    = number
+  default = 7
+}
+
+variable "rds_backup_window" {
+  type    = string
+  default = "18:00-18:30"
+}
+
+variable "rds_maintenance_window" {
+  type    = string
+  default = "sun:19:00-sun:19:30"
+}
+
+variable "rds_deletion_protection" {
+  type    = bool
+  default = true
+}
+
+variable "rds_apply_immediately" {
+  type    = bool
+  default = false
+}
+
 # 공통 코드를 해당 환경의 독립된 리소스로 생성
 module "platform" {
   source = "../../modules/platform"
@@ -67,27 +122,41 @@ module "platform" {
     ap-northeast-2a = "10.40.0.0/24"
     ap-northeast-2c = "10.40.1.0/24"
   }
+  private_subnets = {
+    ap-northeast-2a = "10.40.10.0/24"
+    ap-northeast-2c = "10.40.11.0/24"
+  }
   initial_image_digests = var.initial_image_digests
+  # prod와 같은 서비스별 EC2 타입과 컨테이너 메모리 상한
   service_compute = {
-    be = { instance_type = "t4g.micro", memory = 640 }
-    fe = { instance_type = "t4g.micro", memory = 512 }
+    be = { instance_type = "t4g.small", memory = 1536 }
+    fe = { instance_type = "t4g.small", memory = 1536 }
     ai = { instance_type = "t4g.small", memory = 1536 }
   }
+  # 리허설 용량도 prod와 같이 서비스별 평시 2개, 최대 4개로 설정
   service_capacity = {
-    be = { desired = 1, min = 1, max = 2 }
-    fe = { desired = 1, min = 1, max = 2 }
-    ai = { desired = 1, min = 1, max = 2 }
+    be = { desired = 2, min = 2, max = 4 }
+    fe = { desired = 2, min = 2, max = 4 }
+    ai = { desired = 2, min = 2, max = 4 }
   }
+  redis_parameters = module.valkey.redis_parameters
+  # dev는 RDS master 계정으로 접속하고 RDS 관리 비밀번호를 ECS에 주입
+  database_secret_arn = nonsensitive(module.rds.master_secret_arn)
   managed_parameters = {
-    "be/KAFKA_BOOTSTRAP_SERVERS" = "${aws_instance.data.private_ip}:9092"
-    "be/DB_URL"                  = "jdbc:mysql://${aws_instance.data.private_ip}:3306/${nonsensitive(data.aws_ssm_parameter.mysql_database.value)}?useSSL=false&allowPublicKeyRetrieval=true"
+    "be/DB_URL"                  = "${module.rds.jdbc_url}?sslMode=REQUIRED"
+    "be/DB_USERNAME"             = var.rds_master_username
+    "be/KAFKA_BOOTSTRAP_SERVERS" = "${module.platform.kafka.private_ip}:9092"
   }
-  redis_parameters = {
-    SPRING_DATA_REDIS_HOST        = aws_instance.data.private_ip
-    SPRING_DATA_REDIS_PORT        = "6379"
-    SPRING_DATA_REDIS_USERNAME    = "default"
-    SPRING_DATA_REDIS_SSL_ENABLED = "false"
-  }
+}
+
+module "valkey" {
+  source                    = "../../modules/serverless-valkey"
+  environment               = "dev"
+  vpc_id                    = module.platform.vpc_id
+  subnet_ids                = module.platform.public_subnet_ids
+  backend_security_group_id = module.platform.backend_security_group_id
+  password_parameter_arn    = module.platform.redis_password_parameter_arn
+  password_version          = var.password_version
 }
 
 # 계정 공통 GitHub OIDC 공급자는 개발 state에서 한 번만 관리
@@ -182,6 +251,16 @@ resource "aws_iam_role_policy" "github_deploy" {
           "${local.deploy_arn_prefix}:application:bakkucca-v2-dev-${each.key}",
           "${local.deploy_arn_prefix}:deploymentgroup:bakkucca-v2-dev-${each.key}/bakkucca-v2-dev-${each.key}",
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codedeploy:GetDeploymentTarget"]
+        Resource = "${local.deploy_arn_prefix}:deploymentgroup:bakkucca-v2-dev-${each.key}/bakkucca-v2-dev-${each.key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codedeploy:StopDeployment"]
+        Resource = "*"
       },
       {
         Effect   = "Allow"

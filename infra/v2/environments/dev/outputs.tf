@@ -45,6 +45,22 @@ output "uploads_bucket" {
   value = module.platform.uploads_bucket
 }
 
+output "valkey" {
+  value = merge(module.valkey.valkey, {
+    parameter_names = {
+      for key in keys(module.valkey.redis_parameters) : key => "/bakkucca-v2-dev/be/${key}"
+    }
+  })
+}
+
+output "rds_mysql_endpoint" { value = module.rds.endpoint }
+output "rds_mysql_port" { value = module.rds.port }
+output "rds_mysql_security_group_id" { value = module.rds.security_group_id }
+output "rds_mysql_master_secret_arn" {
+  value     = module.rds.master_secret_arn
+  sensitive = true
+}
+
 # 각 저장소의 dev Environment에 등록할 AWS_ROLE_ARN 출력
 output "github_deploy_role_arns" {
   value = { for service, role in aws_iam_role.github_deploy : service => role.arn }

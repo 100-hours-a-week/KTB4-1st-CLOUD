@@ -35,7 +35,7 @@ moved {
 
 # Kafka 전용 EC2 생성과 SSH 공개키 등록
 resource "aws_instance" "kafka" {
-  count = var.environment == "dev" ? 0 : 1
+  count = 1
 
   ami                         = data.aws_ami.kafka_al2023_arm64.id
   instance_type               = "t4g.small"
@@ -51,10 +51,10 @@ resource "aws_instance" "kafka" {
       trimspace(data.aws_key_pair.kafka_ssh["bakkucca-v1-janna"].public_key),
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGntCupNVtCchM374J7tFhBo0nLM0ckh+Cyp24zZJ8oi martin",
     ]
-    }, jsondecode(var.environment == "staging" ? jsonencode({
+    }, jsondecode(contains(["dev", "staging"], var.environment) ? jsonencode({
       packages = ["java-17-amazon-corretto-headless"]
       runcmd = [
-        # 운영과 같은 Kafka 버전과 systemd 실행 설정으로 스테이징 구성
+        # dev/staging을 동일한 Kafka 버전과 systemd 실행 설정으로 구성
         ["bash", "-ec", <<-EOT
         curl -fsSL --retry 5 https://archive.apache.org/dist/kafka/4.3.1/kafka_2.13-4.3.1.tgz -o /tmp/kafka.tgz
         curl -fsSL --retry 5 https://archive.apache.org/dist/kafka/4.3.1/kafka_2.13-4.3.1.tgz.sha512 -o /tmp/kafka.sha512

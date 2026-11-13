@@ -10,12 +10,13 @@
 | 환경 | CLOUD 루트 기준 실행 폴더 | state key | 관리 대상 |
 |---|---|---|---|
 | 운영 | `infra/v2/environments/prod` | `v2/prod/terraform.tfstate` | 앱·RDS·Valkey·Kafka |
-| 개발 | `infra/v2/environments/dev` | `v2/dev/terraform.tfstate` | 앱·MySQL/Valkey/Kafka 데이터 EC2 |
+| 개발 | `infra/v2/environments/dev` | `v2/dev/terraform.tfstate` | 앱·RDS·Valkey·Kafka |
 | 스테이징 | `infra/v2/environments/staging` | `v2/staging/terraform.tfstate` | 운영과 같은 앱·RDS·Valkey·Kafka, 시험용 v1 연결 |
 
 - `infra/v2` 루트는 실행 폴더가 아님
 - 운영 VPC `10.20.0.0/16`, 개발 `10.40.0.0/16`, 스테이징 `10.30.0.0/16`
-- staging은 prod와 같은 platform·RDS·Valkey 모듈과 서비스 용량 기본값 사용
+- dev·staging은 prod와 같은 platform·RDS·Valkey 모듈, 서비스 용량 기본값, Kafka EC2 구성을 사용
+- 환경 정렬 후 dev는 기존 데이터 EC2와 EBS를 폐기하고 새 RDS·Valkey·Kafka로 전환. 기존 데이터를 보존해야 하면 백업·이관 전 dev plan을 적용하지 않음
 - staging AWS에는 DB 네트워크·RDS만 유지. 재구축 전 [staging 준비](environments/staging/README.md) 확인
 - DB 복제·데이터 이관·DB 롤백과 복제 EC2 설정은 DB 담당자 관리
 
@@ -25,8 +26,7 @@
 |---|---|
 | `environments/*/main.tf` | state·provider·환경별 모듈 입력 |
 | `environments/prod/github-deploy.tf` | 운영 GitHub OIDC 배포 역할 |
-| `environments/dev/data.tf` | 개발 데이터 EC2·볼륨·컨테이너 |
-| `environments/{prod,staging}/rds.tf` | RDS 사양과 접속 설정 |
+| `environments/{dev,prod,staging}/rds.tf` | RDS 사양과 접속 설정 |
 | `environments/{prod,staging}/migration.tf` | v1 피어링·RDS 통신 경로와 SG |
 | `environments/staging/moved.tf` | 보존된 DB 네트워크를 platform 주소로 이전 |
 | `modules/platform` | 앱 네트워크·ECS·ASG·ALB·CloudFront·IAM·SSM·CodeDeploy·Kafka |
@@ -147,16 +147,15 @@ terraform -chdir=infra/v2/environments/prod output cloudfront
 - 운영 ASG: 서비스별 평시 2대·배포 최대 4대, 인스턴스당 태스크 1개
 - 개발 ASG: 서비스별 평시 1대·배포 최대 2대
 - 앱: ARM64, bridge 네트워크, 대상 그룹 유형 `instance`
-- 운영 앱: 서비스별 `t4g.small`, 컨테이너 메모리 상한 1536MiB
-- 개발 앱: BE·FE는 `t4g.micro`, AI는 `t4g.small`. 컨테이너 메모리 상한은 BE 640MiB·FE 512MiB·AI 1536MiB
-- 사양은 `service_compute`로 설정하며 개발 데이터 EC2의 사양은 별도 관리
-- 개발 BE의 SSM `JAVA_TOOL_OPTIONS`는 `-Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m` 사용. 힙 이외의 JVM 메모리도 컨테이너 상한에 포함
-- 개발 FE의 SSM `NODE_OPTIONS`는 `--max-old-space-size=256` 사용. V8 힙 이외의 Node.js 메모리도 컨테이너 상한에 포함
+- 운영·개발 앱: 서비스별 `t4g.small`, 컨테이너 메모리 상한 1536MiB
+- 사양은 `service_compute`와 `service_capacity`로 설정
+- dev SSM의 `JAVA_TOOL_OPTIONS`, `NODE_OPTIONS` 등 수동 런타임 값은 Terraform 환경 정렬에 포함되지 않으므로 부하 리허설 전에 prod 값과 대조
+- 힙 이외의 JVM·Node.js 메모리도 컨테이너 상한에 포함
 - Launch Template 적용만으로 기존 EC2가 교체되지는 않음. 새 태스크 정의 등록 후 서비스 배포로 신규 용량·ALB 상태를 확인하고 기존 EC2를 드레이닝·교체해야 사양 축소 완료
 - readiness: BE `/actuator/health/readiness`, FE `/api/health/readiness`, AI `/health/readiness`
 - 운영 Valkey 암호: SSM 값 변경 → `password_version` 증가·apply → BE 재배포
-- 개발 데이터 EC2: SSM Session Manager, `/opt/bakkucca-data/compose.json`, systemd `bakkucca-data`
-- 개발 데이터 EC2 교체 전 볼륨 보존·백업 확인, 새 접속 주소 반영 후 BE 재배포
+- 정렬 전 개발 데이터 EC2: SSM Session Manager, `/opt/bakkucca-data/compose.json`, systemd `bakkucca-data`
+- dev 전환 적용 전 기존 MySQL·Valkey·Kafka 볼륨을 보존하거나 필요한 데이터를 내보냄
 - 기존 MySQL 비밀번호는 초기화 환경변수만 변경해도 바뀌지 않음
 - FE 이전 JS·CSS는 롤백 기간까지 보존
 - CloudFront 공개키·개인키는 BE SSM에서 관리하며 개인키를 Git에 저장하지 않음
