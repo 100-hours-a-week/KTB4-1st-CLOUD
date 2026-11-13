@@ -8,6 +8,130 @@ Atlas로 읽기를 전환한 뒤에도 MySQL 원본과 변경 이력을 rollback
 - RDS MySQL 버전: 8.4
 - MongoDB Atlas 버전: 9.0
 
+## 마이그레이션 검증 방법
+운영 환경에서 마이그레이션을 진행하기 전, 리허설 환경에서 사전 검증을 선행한다.<br>
+기존 dev 환경은 40rps 수준의 부하를 유지할 수 없으며, 각종 컴포넌트 설정값에 차이가 있으므로 운영 환경에서의 성공을 보장할 수 없다.
+
+### k6 검증
+*40 RPS를 목표로 부하 주입(Peak RPS인 80의 절반)*
+
+<details>
+<summary>부하테스트 시나리오</summary>
+
+```
+[리허설 환경 확인]
+        |
+        v
+[테스트 데이터 준비]
+ reset.sql → seed.sql → validate.sql
+        |
+        v
+[k6 시작: MIGRATION_PHASE=pre]
+        |
+        +-- setup
+        |    ├─ 그룹 아이템을 조회해 교환 fixture pair 구성
+        |    └─ PAIR_ENABLED=true면 pair별 교환 요청/채팅방 준비
+        |
+        +-- migration_e2e ─ CHAT_FLOW_RATE 회/초
+        |     교환 요청(채팅방 생성)
+        |      → 채팅방 상세 조회
+        |      → WebSocket/STOMP 메시지 전송·수신
+        |      → 메시지 이력 조회
+        |      → 교환 요청 취소
+        |
+        +-- http_fill ─ HTTP_FILL_RATE 회/초
+        |     그룹 아이템 목록 조회
+        |
+        +-- pair_sender / pair_receiver
+        |     별도 두 사용자로 WebSocket 메시지 전달 확인
+        |     PAIR_COUNT가 채팅방(pair) 개수
+        |
+        v
+[부하를 유지한 상태에서 온라인 DB 마이그레이션]
+        |
+        +-- k6 요청과 WebSocket이 계속 성공하는지 관찰
+        +-- 마이그레이션 시작/종료 시각 기록
+        |
+        v
+[마이그레이션 후 validate.sql]
+        |
+        v
+[k6 종료 → summary 확인 및 전·중·후 비교]
+```
+</details>
+
+```
+k6 시작 ───────────────────────────────────── k6 종료
+│                 │                 │
+│ 정상 부하 발생     │   DB 마이그레이션   │ 부하 계속 발생
+│                 │                 │
+└──────── HTTP / WebSocket 요청의 성공·지연 측정 ───────┘
+```
+- 채팅방 목록 API 응답 성공 및 응답 형식
+- 교환 요청 생성 및 채팅방 생성
+- 채팅방 상세 조회 및 방 ID 일치
+- WebSocket 연결과 STOMP 연결
+- WebSocket 채팅 메시지 송신 및 같은 메시지 수신
+- 채팅 메시지 조회 성공, 응답 형식 및 메시지 ID 존재
+- 메시지 조회 페이지네이션과 페이지 제한 도달 여부
+- 교환 요청 취소 성공
+- HTTP·메시지 조회 p95 응답 시간
+- 요청 실패율, check 성공률, dropped iteration 수
+- 송신자·수신자 간 WebSocket 메시지 전달 성공률
+
+### 데이터 정합성 검증
+> k6 부하를 유지하면서 MySQL 원본과 MongoDB Atlas 대상의 채팅 메시지 대조
+<details>
+<summary>실행 절차</summary>
+
+검증 스크립트 준비 및 환경변수를 설정한다.
+```
+# cd <검증 스크립트 저장 경로>
+export MYSQL_HOST='RDS_엔드포인트'
+export MYSQL_PORT='3306'
+export MYSQL_USER='MySQL_계정'
+export MYSQL_DATABASE='MySQL_DB명'
+
+export ATLAS_DATABASE='Atlas_DB명'
+export MONGODB_URI='Atlas_접속_URI'
+export MYSQL_TIMEZONE='Asia/Seoul' # 애플리케이션의 실제 DATETIME 시간대 사용
+```
+k6를 시작하고 40 RPS 부하를 유지한다.<br>
+초기 데이터 이관이 워터마크까지 반영되었는지 확인하기 위해 컷오버 전에 검증을 실행한다.
+```
+# MySQL에서 현재 최대 message_id를 조회해 워터마크로 사용하고, 같은 워터마크를 MySQL·Atlas 조회와 비교에 자동으로 전달한다.
+./run-chat-migration-validation.sh before
+
+# <목표 결과>
+# 검증 단계: before
+# 워터마크(message_id 상한): 123456
+# RESULT: PASS
+# 이관 지연 때문에 FAIL이면 지연이 해소된 뒤 다시 실행한다.
+```
+컷오버 후 MongoDB Atlas로 읽기를 전환한 뒤, 다시 검증한다.<br>
+k6 종료 후 마지막 데이터까지 검증하려면 k6를 종료한 뒤 한 번 더 실행한다.
+```
+./run-chat-migration-validation.sh after
+
+# <목표 결과>
+# 검증 단계: after
+# 워터마크(message_id 상한): 654321
+# RESULT: PASS
+# FAIL이면 지연이 해소된 뒤 다시 실행한다.
+```
+실행 결과 자동 저장
+- `chat-validation-<단계>-<실행시각>-mysql.jsonl`
+- `chat-validation-<단계>-<실행시각>-atlas.txt`
+
+</details>
+
+- 컷오버 전 before 검증: 기존 메시지가 Atlas에 이관됐는지 확인
+- 컷오버 후 after 검증: 전환 중 새로 생성된 메시지도 Atlas에 반영됐는지 확인
+- 비교 항목
+  - 메시지 ID의 누락·추가·중복
+  - 채팅방 ID, 발신자 ID, 내용, 메시지 종류, 시스템 이벤트 종류, 생성 시각
+- 통과 조건: RESULT: PASS, 누락·추가·중복 ID 0건, 필드 차이 0건
+
 ---
 
 ## 1. 기술적 의사결정 및 비교 분석
@@ -164,13 +288,13 @@ Peering 연결 자체는 무료지만 전체 데이터 전송이 무료인 것�
 
 | 단계 | 작업 내용 | 데이터 흐름 | 락/지연 영향도                            | 롤백 전략 |
 |---|---|---|-------------------------------------|---|
-| **1. 스키마 확장 (Expand)** | - Flyway로 `chat_messages`에 `message_object_id CHAR(24) NULL` 컬럼 추가.<br>- `ALGORITHM=INSTANT` 적용.<br>*(유니크 인덱스는 DDL 락 및 백필 성능 저하 방지를 위해 1단계에서 생성하지 않음)* | 기존 트래픽 유지 (MySQL R/W) | **락/지연 없음**: 메타데이터만 변경되어 수 ms 이내 완료 | 추가된 컬럼 무시 또는 DDL 롤백 |
+| **1. 스키마 확장** | - Flyway로 `chat_messages`에 `message_object_id CHAR(24) NULL` 컬럼 추가.<br>- `ALGORITHM=INSTANT` 적용.<br>*(유니크 인덱스는 DDL 락 및 백필 성능 저하 방지를 위해 1단계에서 생성하지 않음)* | 기존 트래픽 유지 (MySQL R/W) | **락/지연 없음**: 메타데이터만 변경되어 수 ms 이내 완료 | 추가된 컬럼 무시 또는 DDL 롤백 |
 | **2. Dual-Gen 배포 & CDC 가동 (1차 WAS 배포)** | - WAS 1차 배포: 신규 JPA 엔티티 `@PrePersist`로 `message_object_id` 자동 생성(`new ObjectId().toHexString()`).<br>- Redis 기반 상태 관리 및 라우팅 로직 탑재 (기본값: `MYSQL_PRIMARY`).<br>- Debezium Connector 실행 (`snapshot.mode: no_data`). | **쓰기:** MySQL (신규 메시지에 `message_object_id` 포함)<br>**복제:** MySQL Binlog → Debezium → Kafka → Mongo Sink (Upsert)<br>**읽기:** MySQL | 지연 영향 없음 (단일 로컬 트랜잭션 유지)            | Debezium 커넥터 일시 중지 및 직전 WAS 버전 롤백 |
-| **3. 과거 데이터 Backfill (무배포)** | - Spring Batch Job 실행 (No-Offset 청크 1,000~2,000건).<br>- `message_object_id IS NULL`인 과거 레코드 순회.<br>- 각 레코드의 `created_at` 기반 `ObjectId` 생성 후 MySQL 조건부 UPDATE 및 MongoDB Bulk Upsert.<br>- Throttling(50ms Sleep) 적용. | 백그라운드 배치 프로세스 → MySQL UPDATE & Mongo Bulk Upsert | CPU/IO 제어로 운영 영향 최소화                | 배치 프로세스 즉시 중지 (기존 서비스 비간섭) |
-| **4. 인덱스 생성 & 수렴 검증 (무배포)** | - 백필 완료 확인 후, 필요 시 MySQL에 보조 인덱스 생성(`ALGORITHM=INPLACE, LOCK=NONE`).<br>- Debezium Kafka Consumer Lag 0 수렴 및 Sink 적재 완료 확인.<br>- MySQL vs MongoDB 건수(Count) 및 샘플 데이터 정합성 검증. | 검증 쿼리 실행 | 영향 없음                               | 정합성 불일치 시 백필 배치 재실행 |
-| **5. Read 컷오버 (무배포)** | - Redis 상태 전파: `READ_TARGET=MONGO`.<br>- 모든 WAS의 적용 ACK 확인.<br>- Driver Timeout(500ms) 및 Circuit Breaker 가동 상태로 MongoDB 우선 조회 진입. | **쓰기:** MySQL (Debezium CDC 복제 유지)<br>**읽기:** Mongo 우선 조회 (지연/장애 시 MySQL Fallback) | Timeout 및 Circuit Breaker로 장애 전파 차단 | Redis 상태 원복: `READ_TARGET=MYSQL` |
-| **6. Write 컷오버: Primary 전환 (무배포)** | 1. **쓰기 차단 및 Drain**: 신규 쓰기 요청 일시 대기(1~2초), 잔여 MySQL 트랜잭션 완료.<br>2. **CDC 최종 수렴 확인**: 마지막 MySQL Binlog 이벤트의 MongoDB 적재 완료 확인.<br>3. **상태 전환**: Redis 상태 `WRITE_TARGET=MONGO` 전파 및 전 WAS ACK 확인.<br>4. **쓰기 재개**: MongoDB 직접 쓰기 시작.<br>5. **안전망 가동**: MongoDB Change Streams 기반 MySQL 역방향 복제 실행. | **쓰기:** MongoDB 직접 적재<br>**읽기:** MongoDB 서빙<br>**임시 복제:** Mongo → MySQL (역방향 동기화) | 전환 순간 짧은 쓰기 지연(수초 이내) 발생            | **2단계 롤백 절차 수행**: Mongo 쓰기 차단 → 역방향 동기화 수렴 확인 → MySQL 쓰기 재개 |
-| **7. 역방향 동기화 중단 & 수렴 안정화 (무배포)** | - MongoDB 단독 운영 안정성 확인 (1~2주).<br>- Change Streams Resume Token 및 Lag 모니터링.<br>- 안정화 완료 승인 후 역방향 복제 파이프라인 및 Debezium Connector 영구 종료. | **쓰기:** MongoDB<br>**읽기:** MongoDB | 영향 없음                               | 애플리케이션 레벨 롤백 불가 (DB 스냅샷 백업으로 복구) |
+| **3. 과거 데이터 Backfill** | - Spring Batch Job 실행 (No-Offset 청크 1,000~2,000건).<br>- `message_object_id IS NULL`인 과거 레코드 순회.<br>- 각 레코드의 `created_at` 기반 `ObjectId` 생성 후 MySQL 조건부 UPDATE 및 MongoDB Bulk Upsert.<br>- Throttling(50ms Sleep) 적용. | 백그라운드 배치 프로세스 → MySQL UPDATE & Mongo Bulk Upsert | CPU/IO 제어로 운영 영향 최소화                | 배치 프로세스 즉시 중지 (기존 서비스 비간섭) |
+| **4. 인덱스 생성 & 수렴 검증** | - 백필 완료 확인 후, 필요 시 MySQL에 보조 인덱스 생성(`ALGORITHM=INPLACE, LOCK=NONE`).<br>- Debezium Kafka Consumer Lag 0 수렴 및 Sink 적재 완료 확인.<br>- MySQL vs MongoDB 건수(Count) 및 샘플 데이터 정합성 검증. | 검증 쿼리 실행 | 영향 없음                               | 정합성 불일치 시 백필 배치 재실행 |
+| **5. Read 컷오버** | - Redis 상태 전파: `READ_TARGET=MONGO`.<br>- 모든 WAS의 적용 ACK 확인.<br>- Driver Timeout(500ms) 및 Circuit Breaker 가동 상태로 MongoDB 우선 조회 진입. | **쓰기:** MySQL (Debezium CDC 복제 유지)<br>**읽기:** Mongo 우선 조회 (지연/장애 시 MySQL Fallback) | Timeout 및 Circuit Breaker로 장애 전파 차단 | Redis 상태 원복: `READ_TARGET=MYSQL` |
+| **6. Write 컷오버: Primary 전환** | 1. **쓰기 차단 및 Drain**: 신규 쓰기 요청 일시 대기(1~2초), 잔여 MySQL 트랜잭션 완료.<br>2. **CDC 최종 수렴 확인**: 마지막 MySQL Binlog 이벤트의 MongoDB 적재 완료 확인.<br>3. **상태 전환**: Redis 상태 `WRITE_TARGET=MONGO` 전파 및 전 WAS ACK 확인.<br>4. **쓰기 재개**: MongoDB 직접 쓰기 시작.<br>5. **안전망 가동**: MongoDB Change Streams 기반 MySQL 역방향 복제 실행. | **쓰기:** MongoDB 직접 적재<br>**읽기:** MongoDB 서빙<br>**임시 복제:** Mongo → MySQL (역방향 동기화) | 전환 순간 짧은 쓰기 지연(수초 이내) 발생            | **2단계 롤백 절차 수행**: Mongo 쓰기 차단 → 역방향 동기화 수렴 확인 → MySQL 쓰기 재개 |
+| **7. 역방향 동기화 중단 & 수렴 안정화** | - MongoDB 단독 운영 안정성 확인 (1~2주).<br>- Change Streams Resume Token 및 Lag 모니터링.<br>- 안정화 완료 승인 후 역방향 복제 파이프라인 및 Debezium Connector 영구 종료. | **쓰기:** MongoDB<br>**읽기:** MongoDB | 영향 없음                               | 애플리케이션 레벨 롤백 불가 (DB 스냅샷 백업으로 복구) |
 | **8. 레거시 정리: Contract (2차 WAS 배포)** | - WAS 코드에서 라우터 분기문, MySQL 레거시 엔티티/레포지토리 정리 후 2차 배포.<br>- RDS MySQL 최종 스냅샷 생성 및 복원 검증.<br>- 트래픽 최저 시간대에 MySQL `chat_messages` 테이블 표준 `DROP TABLE` 실행. | MongoDB 단독 서빙 (MySQL 의존성 완전 제거) | DDL 실행 시 잠시 메타데이터 락 경합 가능 (트래픽 최저점 수행) | 스냅샷 보관 후 정리 완료 |
 
 ---
@@ -205,4 +329,3 @@ Peering 연결 자체는 무료지만 전체 데이터 전송이 무료인 것�
 - **읽기/쓰기 전환 안전망 및 Circuit Breaker 검증**
   - 드라이버 레벨 요청 Timeout(500ms)과 Circuit Breaker(Resilience4j)를 구성하여 MongoDB 읽기 실패 시 MySQL로 Fallback되도록 검증한다.
   - 쓰기 전환 시 긴급 롤백을 지원하기 위해 MongoDB Change Streams 기반의 MySQL 역방향 복제 파이프라인 및 2단계 롤백 절차(쓰기 차단 → 동기화 수렴 → MySQL 쓰기 재개)를 사전 검증한다.
-
