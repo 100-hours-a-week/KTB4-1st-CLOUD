@@ -6,7 +6,7 @@ locals {
       ["JWT_SECRET", "KAKAO_CLIENT_SECRET", "PROMETHEUS_AUTH_PASSWORD", "CLOUDFRONT_PRIVATE_KEY_PEM", "SPRING_DATA_REDIS_PASSWORD"],
     )
     fe = ["KAKAO_REST_API_KEY", "DISCORD_WEBHOOK_URL", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_OAUTH_REFRESH_TOKEN"]
-    ai = ["ANTHROPIC_API_KEY"]
+    ai = ["ANTHROPIC_API_KEY", "REFINE_SERVER_API_KEY"]
   }
   runtime_parameter_keys = {
     be = concat([
@@ -22,7 +22,7 @@ locals {
       "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_EVENT_SPREADSHEET_ID", "GOOGLE_EVENT_DRIVE_FOLDER_ID",
       "GOOGLE_EVENT_SHEET_NAME",
     ], local.runtime_secure_parameter_keys.fe)
-    ai = concat(["TZ"], local.runtime_secure_parameter_keys.ai)
+    ai = concat(["TZ", "REFINE_SERVER_URL", "REFINE_SERVER_MODEL"], local.runtime_secure_parameter_keys.ai)
   }
   runtime_parameter_names = {
     for service, keys in local.runtime_parameter_keys : service => {
